@@ -963,12 +963,18 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
   document.getElementById('bJoin').addEventListener('click',function(){
     var code=document.getElementById('code').value.trim().toLowerCase(),nm=document.getElementById('netmsg');
     if(!/^[a-z0-9][a-z0-9_.-]{0,19}$/.test(code)){nm.textContent='合言葉は英数字で入れてください。';return;}
-    if(!lobby){nm.textContent='この画面では通信が使えません。';return;}
-    nm.textContent='接続中…';
-    lobby.join('mt-'+code).then(function(r){room=r;round=0;lg='';applied=0;netOn=false;ready=false;lastPub='';
+    if(!lobby){nm.textContent='通信ライブラリ未初期化。ページを再読み込みしてください。';return;}
+    if(room){try{room.leave();}catch(e){} room=null;}
+    nm.textContent='Supabaseに接続中…';
+    lobby.join('mt-'+code,function(st,detail){
+      if(st==='SUBSCRIBED')nm.textContent='通信接続OK。相手を確認中…';
+      else if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'||st==='CLOSED')nm.textContent='通信エラー：'+st+(detail?' / '+String(detail.message||detail):'');
+      else nm.textContent='通信状態：'+st;
+    }).then(function(r){room=r;round=0;lg='';applied=0;netOn=false;ready=false;lastPub='';
       r.onPeers(onNet);document.getElementById('bReady').hidden=false;document.getElementById('bJoin').hidden=true;
-      nm.textContent='相手を待っています…(合言葉「'+code+'」)';pub();onNet();},
-      function(){nm.textContent='接続できませんでした。もう一度ためしてください。';});});
+      nm.textContent='接続OK！相手を待っています…（合言葉「'+code+'」）';
+      pub();setTimeout(onNet,300);},
+      function(err){room=null;nm.textContent='接続失敗：'+(err&&err.message?err.message:String(err||'原因不明'))+'。SupabaseのRealtime設定・通信環境を確認してください。';});});
   document.getElementById('bReady').addEventListener('click',function(){ready=true;this.disabled=true;pub();onNet();});
   // Supabase Realtime adapter: keep the existing game UI/turn log, replace the old hosted-room dependency.
   var SUPABASE_URL='https://bccvjjtsiogmtankberh.supabase.co';
@@ -978,11 +984,12 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
   var sbPeerOrder=Date.now()*1000+Math.floor(Math.random()*1000);
   function makeSupabaseRoomAdapter(){
     return {
-      join:function(topic){
+      join:function(topic,onStatus){
         return new Promise(function(resolve,reject){
           if(!sbClient){reject(new Error('Supabase SDKを読み込めませんでした'));return;}
           var channel=sbClient.channel(topic,{config:{presence:{key:sbClientId}}});
-          var callbacks=[];
+          var callbacks=[];var settled=false;
+          var timeout=setTimeout(function(){if(!settled){settled=true;try{sbClient.removeChannel(channel);}catch(e){}reject(new Error('15秒以内に接続応答がありません（タイムアウト）'));}},15000);
           var adapter={
             _channel:channel,
             _callbacks:callbacks,
@@ -1000,8 +1007,9 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
           };
           function notify(){callbacks.slice().forEach(function(fn){try{fn();}catch(e){}});}
           channel.subscribe(function(status,err){
-            if(status==='SUBSCRIBED')resolve(adapter);
-            else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED')reject(err||new Error(status));
+            if(typeof onStatus==='function')try{onStatus(status,err);}catch(e){}
+            if(status==='SUBSCRIBED'&&!settled){settled=true;clearTimeout(timeout);resolve(adapter);}
+            else if((status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED')&&!settled){settled=true;clearTimeout(timeout);reject(err||new Error(status));}
           });
         });
       }
