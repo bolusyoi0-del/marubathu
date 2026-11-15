@@ -978,7 +978,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
   document.getElementById('stage').addEventListener('click',function(){if(fxLock&&performance.now()-fxAt>400)skipFx();});
   function pub(){
     if(!room)return;var d={g:{r:round,ch:chars[myRole],z:cfg.size,k:cfg.kill?1:0,f:firstChoice,rd:ready?1:0,lg:lg}},j=JSON.stringify(d);
-    if(j===lastPub)return;lastPub=j;room.presence(d).catch(function(){lastPub='';});
+    if(j===lastPub)return;lastPub=j;room.presence(d).catch(function(err){lastPub='';var nm=document.getElementById('netmsg');if(nm)nm.textContent='通信データ送信エラー：'+(err&&err.message?err.message:String(err||'不明'))+'。再接続が必要です。';});
   }
   function peerInfo(){
     if(!room)return null;var ps=room.peers(),me=null,o=null;
@@ -1062,8 +1062,14 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
         return new Promise(function(resolve,reject){
           if(!sbClient){reject(new Error('Supabase SDKを読み込めませんでした'));return;}
           var channel=sbClient.channel(topic,{config:{presence:{key:sbClientId}}});
-          var callbacks=[];var settled=false;
+          var callbacks=[];var settled=false;var trackQueue=Promise.resolve();var channelClosed=false;
           function notify(){callbacks.slice().forEach(function(fn){try{fn();}catch(e){}});}
+          channel.on('system',{},function(payload){
+            if(payload&&payload.status==='error'){
+              var nm=document.getElementById('netmsg');
+              if(nm)nm.textContent='通信システム通知：'+(payload.message||payload.status);
+            }
+          });
           // Presenceイベントはsubscribe前に登録する。後付けだと初回sync/joinを取りこぼす環境がある。
           channel.on('presence',{event:'sync'},notify);
           channel.on('presence',{event:'join'},notify);
@@ -1073,7 +1079,16 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
             _channel:channel,
             _callbacks:callbacks,
             onPeers:function(fn){callbacks.push(fn);notify();},
-            presence:function(data){return channel.track({g:data.g,peer:sbPeerOrder,kind:'viewer',client:sbClientId});},
+            presence:function(data){
+              // Presence.trackを同時実行しない。必殺技は短時間に複数回更新するため、
+              // track要求が競合してチャンネル状態を壊さないよう順番に送る。
+              var payload={g:data.g,peer:sbPeerOrder,kind:'viewer',client:sbClientId};
+              trackQueue=trackQueue.catch(function(){}).then(function(){
+                if(channelClosed)throw new Error('通信チャンネルが閉じています');
+                return channel.track(payload);
+              });
+              return trackQueue;
+            },
             peers:function(){
               var state=channel.presenceState(),out=[];
               Object.keys(state||{}).forEach(function(key){
@@ -1085,7 +1100,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
               });
               return out;
             },
-            leave:function(){try{sbClient.removeChannel(channel);}catch(e){}}
+            leave:function(){channelClosed=true;try{sbClient.removeChannel(channel);}catch(e){}}
           };
           channel.subscribe(function(status,err){
             if(typeof onStatus==='function')try{onStatus(status,err);}catch(e){}
