@@ -1014,24 +1014,41 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
     document.getElementById('bReady').hidden=true;document.getElementById('bReady').disabled=false;document.getElementById('bJoin').hidden=false;
     document.getElementById('netmsg').textContent='同じ合言葉を入れた2人で対戦できます。相手にも同じリンクを開いてもらってね。';
   }
-  document.getElementById('bMk').addEventListener('click',function(){
-    var t='';for(var i=0;i<4;i++)t+='abcdefghjkmnpqrstuvwxyz23456789'.charAt(Math.floor(Math.random()*31));
-    document.getElementById('code').value=t;});
-  document.getElementById('bJoin').addEventListener('click',function(){
-    var code=document.getElementById('code').value.trim().toLowerCase(),nm=document.getElementById('netmsg');
+  function connectToRoom(code,mode){
+    var nm=document.getElementById('netmsg');
     if(!/^[a-z0-9][a-z0-9_.-]{0,19}$/.test(code)){nm.textContent='合言葉は英数字で入れてください。';return;}
     if(!lobby){nm.textContent='通信ライブラリ未初期化。ページを再読み込みしてください。';return;}
     if(room){try{room.leave();}catch(e){} room=null;}
-    nm.textContent='Supabaseに接続中…';
+    netOn=false;ready=false;lg='';applied=0;lastPub='';round=0;
+    document.getElementById('bReady').hidden=true;
+    document.getElementById('bReady').disabled=false;
+    document.getElementById('bJoin').hidden=false;
+    nm.textContent=(mode==='host'?'ホストルームを作成して接続中…':'ルームに参加中…');
     lobby.join('mt-'+code,function(st,detail){
-      if(st==='SUBSCRIBED')nm.textContent='通信接続OK。相手を確認中…';
+      if(st==='SUBSCRIBED')nm.textContent=(mode==='host'?'ホストルーム作成OK。相手を待っています…':'ルーム接続OK。ホストを確認中…');
       else if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'||st==='CLOSED')nm.textContent='通信エラー：'+st+(detail?' / '+String(detail.message||detail):'');
       else nm.textContent='通信状態：'+st;
-    }).then(function(r){room=r;round=0;lg='';applied=0;netOn=false;ready=false;lastPub='';
-      r.onPeers(onNet);document.getElementById('bReady').hidden=false;document.getElementById('bJoin').hidden=true;
-      nm.textContent='接続OK！相手を待っています…（合言葉「'+code+'」）';
-      pub();setTimeout(onNet,300);},
-      function(err){room=null;nm.textContent='接続失敗：'+(err&&err.message?err.message:String(err||'原因不明'))+'。SupabaseのRealtime設定・通信環境を確認してください。';});});
+    }).then(function(r){
+      room=r;round=0;lg='';applied=0;netOn=false;ready=false;lastPub='';
+      r.onPeers(onNet);
+      document.getElementById('bReady').hidden=false;
+      document.getElementById('bJoin').hidden=true;
+      nm.textContent=(mode==='host'?'ホストルーム作成完了！合言葉「'+code+'」で相手を待っています。':'ルーム参加完了！ホストと接続しています…');
+      pub();setTimeout(onNet,300);
+    },function(err){
+      room=null;
+      nm.textContent='接続失敗：'+(err&&err.message?err.message:String(err||'原因不明'))+'。SupabaseのRealtime設定・通信環境を確認してください。';
+    });
+  }
+  document.getElementById('bMk').addEventListener('click',function(){
+    var t='';for(var i=0;i<4;i++)t+='abcdefghjkmnpqrstuvwxyz23456789'.charAt(Math.floor(Math.random()*31));
+    document.getElementById('code').value=t;
+    connectToRoom(t,'host');
+  });
+  document.getElementById('bJoin').addEventListener('click',function(){
+    var code=document.getElementById('code').value.trim().toLowerCase();
+    connectToRoom(code,'guest');
+  });
   document.getElementById('bReady').addEventListener('click',function(){ready=true;this.disabled=true;pub();onNet();});
   // Supabase Realtime adapter: keep the existing game UI/turn log, replace the old hosted-room dependency.
   var SUPABASE_URL='https://bccvjjtsiogmtankberh.supabase.co';
@@ -1046,23 +1063,30 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
           if(!sbClient){reject(new Error('Supabase SDKを読み込めませんでした'));return;}
           var channel=sbClient.channel(topic,{config:{presence:{key:sbClientId}}});
           var callbacks=[];var settled=false;
+          function notify(){callbacks.slice().forEach(function(fn){try{fn();}catch(e){}});}
+          // Presenceイベントはsubscribe前に登録する。後付けだと初回sync/joinを取りこぼす環境がある。
+          channel.on('presence',{event:'sync'},notify);
+          channel.on('presence',{event:'join'},notify);
+          channel.on('presence',{event:'leave'},notify);
           var timeout=setTimeout(function(){if(!settled){settled=true;try{sbClient.removeChannel(channel);}catch(e){}reject(new Error('15秒以内に接続応答がありません（タイムアウト）'));}},15000);
           var adapter={
             _channel:channel,
             _callbacks:callbacks,
-            onPeers:function(fn){callbacks.push(fn);channel.on('presence',{event:'sync'},notify);channel.on('presence',{event:'join'},notify);channel.on('presence',{event:'leave'},notify);notify();},
+            onPeers:function(fn){callbacks.push(fn);notify();},
             presence:function(data){return channel.track({g:data.g,peer:sbPeerOrder,kind:'viewer',client:sbClientId});},
             peers:function(){
               var state=channel.presenceState(),out=[];
               Object.keys(state||{}).forEach(function(key){
                 var entries=state[key]||[];
-                entries.forEach(function(meta){out.push({isMe:key===sbClientId,sameTab:key===sbClientId,peer:Number(meta.peer)||0,kind:meta.kind||'viewer',presence:{g:meta.g}});});
+                entries.forEach(function(meta){
+                  var isSelf=meta.client===sbClientId;
+                  out.push({isMe:isSelf,sameTab:isSelf,peer:Number(meta.peer)||0,kind:meta.kind||'viewer',presence:{g:meta.g}});
+                });
               });
               return out;
             },
             leave:function(){try{sbClient.removeChannel(channel);}catch(e){}}
           };
-          function notify(){callbacks.slice().forEach(function(fn){try{fn();}catch(e){}});}
           channel.subscribe(function(status,err){
             if(typeof onStatus==='function')try{onStatus(status,err);}catch(e){}
             if(status==='SUBSCRIBED'&&!settled){settled=true;clearTimeout(timeout);resolve(adapter);}
