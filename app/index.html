@@ -1,0 +1,2401 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>マルバツゲーム</title>
+<style>
+:root{
+  --bg:#f3f7ff; --card:#ffffff; --ink:#23304d; --sub:#6b7a99; --line:#cfdaf3;
+  --o:#ff6f8f; --x:#3a7bff; --accent:#3a7bff; --accent-ink:#ffffff; --win:#fff1b8; --target:#ff9f1c; --chipbg:#e6eeff;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#161c2c; --card:#202942; --ink:#eaf0ff; --sub:#9fb0d6; --line:#3a4668;
+    --o:#ff8ea6; --x:#7aa5ff; --accent:#7aa5ff; --accent-ink:#10203f; --win:#4d4520; --target:#ffb84d; --chipbg:#2c3858;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#161c2c; --card:#202942; --ink:#eaf0ff; --sub:#9fb0d6; --line:#3a4668;
+  --o:#ff8ea6; --x:#7aa5ff; --accent:#7aa5ff; --accent-ink:#10203f; --win:#4d4520; --target:#ffb84d; --chipbg:#2c3858;
+}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
+  font-family:"Hiragino Maru Gothic ProN","Hiragino Sans","Yu Gothic",sans-serif;
+  display:flex;justify-content:center;padding:18px 14px}
+main{width:100%;max-width:440px;text-align:center}
+h1{font-size:1.45rem;margin:4px 0 12px}
+h1.title-logo{width:100%;margin:0 auto 10px;line-height:0}
+h1.title-logo img{display:block;width:100%;height:auto;max-height:250px;object-fit:contain}
+.opts{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-bottom:8px}
+.chip{border:2px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;
+  padding:7px 12px;font:inherit;font-size:.82rem;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+#rule{font-size:.78rem;color:var(--sub);margin:6px 0 10px}
+  .start-match{display:block;margin:12px auto 16px;padding:12px 30px;border:0;border-radius:999px;background:linear-gradient(135deg,#ff65a8,#a94de8);color:#fff;font-weight:800;font-size:1.05rem;box-shadow:0 5px 0 #bd4b91,0 8px 18px #d95ca855;cursor:pointer}
+  .start-match:active{transform:translateY(3px);box-shadow:0 2px 0 #bd4b91}
+  .start-match[hidden]{display:none}
+#status{font-size:1.1rem;font-weight:700;min-height:1.7em;margin:4px 0}
+#note{font-size:.85rem;color:var(--sub);min-height:1.3em;margin-bottom:8px}
+#board{display:grid;grid-template-rows:repeat(3,1fr);gap:5px;
+  width:100%;aspect-ratio:1;background-color:transparent;background-position:center;
+  background-size:100% 100%;background-repeat:no-repeat;padding:15% 10% 13%;
+  border-radius:0;overflow:hidden}
+.cell{min-width:0;min-height:0;aspect-ratio:1;border:0;border-radius:5px;
+  background:rgba(255,255,255,.16);font:inherit;
+  font-size:clamp(2.4rem,14vw,4rem);font-weight:700;color:var(--ink);line-height:1;cursor:pointer;padding:0}
+#board.n5 .cell{font-size:clamp(1.5rem,8.5vw,2.5rem)}
+.skin-pick{margin:8px 0 12px;text-align:left}
+.skin-title{font-size:.8rem;color:var(--sub);font-weight:700;margin:0 2px 5px}
+.skin-choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.skin-option{min-width:0;border:2px solid var(--line);border-radius:12px;background:var(--card);
+  color:var(--ink);padding:4px 3px 5px;font:inherit;cursor:pointer;display:flex;
+  flex-direction:column;align-items:center;gap:2px}
+.skin-option[aria-pressed="true"]{border-color:var(--accent);background:var(--chipbg);
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 22%,transparent)}
+.skin-option img{width:100%;height:66px;object-fit:contain;display:block}
+.simple-preview{width:100%;height:66px;display:grid;grid-template-columns:repeat(2,1fr);
+  grid-template-rows:repeat(2,1fr);gap:3px;padding:8px;background:var(--line);border-radius:8px}
+.simple-preview i{display:block;background:var(--card);border-radius:3px}
+
+.skin-option b{font-size:.72rem;line-height:1.2}
+.cell.skin-on{background-image:none!important}
+.cell.skin-on img{width:82%;height:82%;object-fit:contain}
+.cell.skin-on.win{background-color:rgba(255,241,184,.48)}
+#board.n5{grid-template-rows:repeat(5,1fr);gap:3px;padding:15% 10% 13%}
+#board.n5 .cell{border-radius:3px}
+#board.simple-board .cell{background:var(--card)}
+@media(max-width:360px){.skin-option img{height:56px}.skin-choices{gap:4px}}
+
+.cell.o{color:var(--o)} .cell.x{color:var(--x)}
+.cell.win{background:var(--win)}
+.cell.target{outline:3px dashed var(--target);outline-offset:-3px}
+.pickrow{margin:6px 0 2px;text-align:left}
+.pickrow>span{font-size:.78rem;color:var(--sub)}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:4px}
+.card{border:2px solid var(--line);background:var(--card);color:var(--ink);border-radius:14px;
+  padding:6px 4px;font:inherit;font-size:.72rem;line-height:1.35;cursor:pointer;text-align:center}
+.card svg{width:44px;height:44px;display:block;margin:0 auto 2px}
+.card b{display:block;font-size:.85rem}
+.card[aria-pressed="true"]{border-color:var(--accent);background:var(--chipbg)}
+.card:disabled{cursor:default}
+.skrow{display:flex;align-items:center;gap:8px;margin-top:10px;text-align:left}
+.skrow svg{width:36px;height:36px;flex:0 0 36px}
+.who{flex:0 0 5.6em;font-size:.78rem;color:var(--sub);line-height:1.3}
+.sk{display:flex;gap:6px;flex-wrap:wrap}
+.sk button{border:2px solid var(--line);background:var(--card);color:var(--ink);border-radius:12px;
+  padding:7px 9px;font:inherit;font-size:.8rem;cursor:pointer}
+.sk button.on{background:var(--target);color:#2a1a00;border-color:var(--target)}
+.sk button.used{text-decoration:line-through}
+.sk button:disabled{opacity:.4;cursor:default}
+.score{display:flex;justify-content:space-around;margin:14px 0;color:var(--sub);font-size:.9rem}
+.score b{color:var(--ink);font-size:1.15rem}
+button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+#stage{position:relative}
+#banner{position:absolute;left:0;right:0;top:38%;display:flex;align-items:center;justify-content:center;gap:10px;padding:10px;background:linear-gradient(90deg,transparent,rgba(255,111,143,.93) 18%,rgba(255,111,143,.93) 82%,transparent);color:#fff;font-weight:700;pointer-events:none;opacity:0;text-align:left}
+#banner svg{width:52px;height:52px}
+#banner.show{animation:ban 1.3s ease-out}
+@keyframes ban{0%{opacity:0;transform:translateX(-60%) scale(.9)}20%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0;transform:translateX(40%)}}
+#stage.shake{animation:shk .4s}
+@keyframes shk{20%{transform:translate(-5px,2px)}40%{transform:translate(5px,-2px)}60%{transform:translate(-4px,0)}80%{transform:translate(3px,1px)}}
+.cell{position:relative}
+.cell.pop{animation:pop .28s ease-out}
+@keyframes pop{0%{transform:scale(.2);opacity:0}70%{transform:scale(1.2)}100%{transform:scale(1)}}
+.cell.fx-flip{animation:flp .6s}
+@keyframes flp{to{transform:rotateY(360deg)}}
+.cell.fx-swap{animation:swp .5s}
+@keyframes swp{40%{transform:scale(1.35) rotate(12deg)}to{transform:none}}
+.cell.fx-erase::after{content:'💥';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:2.2rem;animation:puff .6s forwards}
+@keyframes puff{0%{transform:scale(.3);opacity:1}to{transform:scale(1.6);opacity:0}}
+@media (prefers-reduced-motion:reduce){.cell,#banner,#stage{animation:none!important}.cell::after{display:none}}
+.nbtn{border:2px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:7px 12px;font:inherit;font-size:.82rem;cursor:pointer}
+#code{padding:7px 10px;border-radius:12px;border:2px solid var(--line);background:var(--card);color:var(--ink);font:inherit;width:9.5em}
+.nm{font-size:.8rem;color:var(--sub);margin:4px 0}
+#cut{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;background:rgba(12,0,28,.78);overflow:hidden;cursor:pointer}
+#cut.on{display:flex}
+#cut::before{content:'';position:absolute;inset:-60%;background:repeating-conic-gradient(rgba(255,255,255,0) 0 3deg,rgba(255,255,255,.2) 3deg 4deg);animation:spn 2s linear infinite}
+@keyframes spn{to{transform:rotate(30deg)}}
+#cut .ci{position:relative;width:min(94vw,540px);aspect-ratio:16/9;filter:drop-shadow(0 0 22px var(--gl,#fff))}
+#cut.on .ci{animation:cil .55s cubic-bezier(.15,1.15,.3,1) both}
+#cut.r.on .ci{animation-name:cir}
+@keyframes cil{from{transform:translateX(-130%) skewX(-10deg) scale(.85);opacity:0}to{transform:none;opacity:1}}
+@keyframes cir{from{transform:translateX(130%) skewX(10deg) scale(.85);opacity:0}to{transform:none;opacity:1}}
+#cut img{width:100%;height:100%;object-fit:contain;display:block}
+#cut .nm{position:absolute;left:0;right:0;bottom:-4px;text-align:center;color:#fff;font-weight:900;font-size:clamp(1.3rem,7vw,2.3rem);text-shadow:-2px -2px 0 var(--gl),2px -2px 0 var(--gl),-2px 2px 0 var(--gl),2px 2px 0 var(--gl),0 4px 10px rgba(0,0,0,.5)}
+#cut.on .nm{animation:cpun .35s .4s cubic-bezier(.2,1.6,.4,1) both}
+@keyframes cpun{from{transform:scale(2.4);opacity:0}to{transform:none;opacity:1}}
+#cut .fl{position:absolute;inset:0;background:#fff;pointer-events:none;opacity:0}
+#cut.on .fl{animation:cfl .5s .25s ease-out}
+@keyframes cfl{0%{opacity:.9}to{opacity:0}}
+@media (prefers-reduced-motion:reduce){#cut::before,#cut .ci,#cut .nm,#cut .fl{animation:none!important}}
+.cell img{width:90%;height:90%;object-fit:contain;pointer-events:none;display:block;margin:auto}
+.card img.sp{width:100%;height:auto;display:block;image-rendering:auto}
+.skrow img{width:40px;height:40px;flex:0 0 40px;object-fit:cover;object-position:50% 8%;border-radius:50%;background:var(--chipbg)}
+#stage.lock .cell{pointer-events:none}
+#board{position:relative;z-index:1}#fxc{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:5}
+.cell.pop-m{animation:pm .45s}
+@keyframes pm{0%{transform:scale(.3)}30%{transform:scale(1.35,.6)}55%{transform:scale(.8,1.3)}80%{transform:scale(1.08,.94)}to{transform:none}}
+.cell.pop-l{animation:pl .5s}
+@keyframes pl{0%{transform:scale(.4) rotate(-90deg);opacity:0}to{transform:none;opacity:1}}
+.cell.pop-h{animation:ph .35s cubic-bezier(.3,1.6,.5,1)}
+@keyframes ph{0%{transform:translateY(-60%) scale(1.5);opacity:0}70%{transform:translateY(5%) scale(.95);opacity:1}to{transform:none}}
+
+#victory{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;
+  padding:14px;background:rgba(10,5,28,.88);overflow:hidden;cursor:pointer;isolation:isolate}
+#victory.on{display:flex}
+#victory::before{content:'';position:absolute;inset:-55%;z-index:-1;
+  background:repeating-conic-gradient(from 0deg,rgba(255,255,255,0) 0 8deg,rgba(255,255,255,.22) 8deg 10deg);
+  animation:vspin 12s linear infinite}
+#victory::after{content:'';position:absolute;inset:0;z-index:-1;opacity:.8;
+  background:radial-gradient(circle at 50% 48%,var(--vcolor),transparent 65%)}
+@keyframes vspin{to{transform:rotate(360deg)}}
+#victory .victory-card{position:relative;width:min(96vw,900px);aspect-ratio:16/9;
+  filter:drop-shadow(0 0 24px var(--vcolor));}
+#victory img{width:100%;height:100%;object-fit:contain;display:block;border-radius:12px}
+#victory.on .victory-card{animation:vin .72s cubic-bezier(.12,1.25,.28,1) both}
+@keyframes vin{0%{opacity:0;transform:scale(.42) rotate(-5deg)}65%{opacity:1;transform:scale(1.06) rotate(1deg)}100%{opacity:1;transform:scale(1) rotate(0)}}
+#victory .v-hint{position:absolute;bottom:12px;left:0;right:0;color:#fff;text-align:center;
+  font-size:.82rem;font-weight:700;text-shadow:0 2px 8px #000;opacity:.9}
+#victory.mika{--vcolor:rgba(255,55,150,.65)}
+#victory.luna{--vcolor:rgba(145,80,255,.68)}
+#victory.haru{--vcolor:rgba(255,145,25,.68)}
+#victory.welza{--vcolor:rgba(174,55,255,.72)}
+#victory.draw{--vcolor:rgba(125,90,255,.72)}
+@media (prefers-reduced-motion:reduce){#victory::before,#victory.on .victory-card{animation:none!important}}
+
+
+/* ===== Princess pink settings theme ===== */
+:root{
+  --bg:#fff3f8;
+  --card:#fffafd;
+  --ink:#713b60;
+  --sub:#a66d91;
+  --line:#f3c5dc;
+  --o:#f04f9b;
+  --x:#8b68e8;
+  --accent:#ec65a8;
+  --accent-ink:#fff;
+  --win:#fff0b5;
+  --target:#ffb84d;
+  --chipbg:#ffe3f0;
+}
+:root[data-theme="dark"]{
+  --bg:#281a2b;
+  --card:#3b263d;
+  --ink:#ffeaf5;
+  --sub:#d5a4c3;
+  --line:#754766;
+  --o:#ff8fc4;
+  --x:#b5a0ff;
+  --accent:#d95b9d;
+  --accent-ink:#fff;
+  --win:#59472e;
+  --target:#ffc56a;
+  --chipbg:#57344e;
+}
+body{
+  background:
+    radial-gradient(ellipse at 8% 0%,rgba(255,190,220,.42),transparent 34%),
+    radial-gradient(ellipse at 95% 15%,rgba(220,195,255,.35),transparent 30%),
+    var(--bg);
+}
+main{max-width:460px}
+main > .opts,
+.skin-pick,
+#netbox,
+#pick{
+  position:relative;
+  margin:10px 0;
+  padding:12px 10px 10px;
+  border:1.5px solid var(--line);
+  border-radius:19px;
+  background:linear-gradient(145deg,rgba(255,255,255,.94),rgba(255,235,246,.9));
+  box-shadow:0 4px 12px rgba(190,94,145,.09),inset 0 1px 0 rgba(255,255,255,.95);
+}
+:root[data-theme="dark"] main > .opts,
+:root[data-theme="dark"] .skin-pick,
+:root[data-theme="dark"] #netbox,
+:root[data-theme="dark"] #pick{
+  background:linear-gradient(145deg,#432b46,#35233b);
+  box-shadow:0 4px 14px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.06);
+}
+main > .opts::before{
+  display:block;
+  flex:0 0 100%;
+  margin:0 0 7px;
+  color:#bd5e91;
+  font-size:.78rem;
+  font-weight:900;
+  letter-spacing:.08em;
+  text-align:left;
+  content:"設定";
+}
+main > .opts[aria-label="ばんのおおきさ"]::before{content:"✧ ばんの大きさ ✧"}
+main > .opts[aria-label="あそび方"]::before{content:"♡ あそび方 ♡"}
+main > .opts[aria-label="演出"]::before{content:"✦ 演出 ✦"}
+main > .opts[aria-label="必殺技で仕留める"]::before{content:"♛ 技で仕留める ♛"}
+main > .opts[aria-label="必殺技回数"]::before{content:"必殺技回数"}
+.chip,.nbtn,.sk button{
+  border:1.5px solid #efbfd7;
+  background:linear-gradient(180deg,#fff 0%,#fff1f7 100%);
+  color:#85486c;
+  box-shadow:0 2px 4px rgba(192,95,147,.08);
+  transition:transform .12s ease,box-shadow .12s ease,background .12s ease;
+}
+.chip{font-weight:700}
+.chip[aria-pressed="true"]{
+  border-color:#e65a9d;
+  color:#fff;
+  background:linear-gradient(135deg,#ff9ac7,#e65a9d 62%,#bd70d7);
+  box-shadow:0 3px 9px rgba(220,83,153,.27),inset 0 1px 0 rgba(255,255,255,.45);
+}
+.chip:active,.nbtn:active,.sk button:active{transform:scale(.97)}
+.skin-pick{padding-top:15px}
+.skin-title{
+  display:block;
+  margin:0 0 9px;
+  padding:7px 12px;
+  border-radius:999px;
+  color:#fff;
+  text-align:center;
+  font-size:.85rem;
+  font-weight:900;
+  letter-spacing:.04em;
+  background:linear-gradient(90deg,#f49ac3,#d987d4,#a88ae9);
+  box-shadow:0 3px 8px rgba(197,102,163,.2);
+}
+.skin-option{
+  border:2px solid #f0c3da;
+  border-radius:15px;
+  background:linear-gradient(160deg,#fff,#fff2f8);
+  color:#82486c;
+  box-shadow:0 2px 6px rgba(190,94,145,.08);
+}
+.skin-option[aria-pressed="true"]{
+  border-color:#e45b9d;
+  background:linear-gradient(160deg,#ffe1ef,#f9d8f0);
+  box-shadow:0 0 0 2px rgba(235,91,158,.16),0 4px 10px rgba(190,94,145,.15);
+}
+.skin-option b{color:#87466e;font-weight:900}
+#netbox{padding:12px 10px}
+#netbox .nm{color:var(--sub);line-height:1.5}
+#code{
+  border:1.5px solid #efbfd7;
+  border-radius:12px;
+  background:#fffafd;
+  color:#713b60;
+}
+#pick{padding:12px 9px}
+.pickrow{
+  margin:0 0 13px;
+  padding:9px 7px 10px;
+  border:1px solid #f2c9df;
+  border-radius:15px;
+  background:rgba(255,255,255,.62);
+}
+.pickrow:last-child{margin-bottom:0}
+.pickrow>span{
+  display:inline-block;
+  margin:0 0 6px;
+  padding:5px 12px;
+  border-radius:999px;
+  color:#fff;
+  font-size:.78rem;
+  font-weight:900;
+  background:linear-gradient(90deg,#ed8db9,#c58cdd);
+}
+.card{
+  border:1.8px solid #efc5db;
+  border-radius:16px;
+  background:linear-gradient(160deg,#fff,#fff3f8);
+  color:#754461;
+  box-shadow:0 2px 7px rgba(180,91,139,.08);
+}
+.card[aria-pressed="true"]{
+  border-color:#e45b9d;
+  background:linear-gradient(160deg,#ffe0ef,#f5ddfa);
+  box-shadow:0 0 0 2px rgba(235,91,158,.15),0 4px 10px rgba(190,94,145,.14);
+}
+.card b{color:#a14c7d}
+.skrow{
+  padding:8px 9px;
+  border:1px solid #efc8dd;
+  border-radius:14px;
+  background:linear-gradient(100deg,rgba(255,235,246,.92),rgba(248,239,255,.88));
+}
+.sk button{font-weight:800}
+.sk button.on{
+  background:linear-gradient(135deg,#ffd18a,#ffad65);
+  color:#713b40;
+  border-color:#f4a34f;
+}
+.sk button.used{opacity:.55}
+.score{
+  padding:12px 8px;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:linear-gradient(120deg,rgba(255,255,255,.8),rgba(255,232,245,.8));
+  color:var(--sub);
+}
+#rule{
+  padding:8px 10px;
+  border-radius:12px;
+  background:rgba(255,255,255,.65);
+  color:#9b6485;
+}
+#status{color:#d94f91;text-shadow:0 1px 0 #fff;font-weight:900}
+#note{color:#a66d91}
+button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
+@media(max-width:360px){
+  main > .opts,.skin-pick,#netbox,#pick{padding-left:7px;padding-right:7px}
+  .chip{padding:7px 10px;font-size:.78rem}
+}
+
+
+/* Character-specific illustrated special-move buttons */
+.sk{flex:1;min-width:0;display:flex;align-items:center}
+.sk button.skill-art{
+  display:block;width:100%;min-width:0;padding:0;border:0;background:transparent;
+  border-radius:4px;overflow:visible;line-height:0;box-shadow:none;
+}
+.sk button.skill-art img{display:block;width:100%;height:auto;max-height:76px;object-fit:contain;border-radius:4px}
+.sk button.skill-art.on{background:transparent;box-shadow:0 0 0 2px #f06cab,0 0 10px rgba(239,92,166,.42)}
+.sk button.skill-art.used{filter:grayscale(.85);opacity:.42}
+.sk button.skill-art:disabled{opacity:.5}
+.sk button.skill-art:active:not(:disabled){transform:scale(.985)}
+.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+
+.extra-setting{margin:8px 0 12px;padding:10px 12px;border:2px solid var(--line);border-radius:16px;background:var(--card);text-align:left}
+.extra-title{font-size:.82rem;color:var(--sub);font-weight:700;margin:0 0 7px}
+.extra-row{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-bottom:9px}
+.extra-row:last-child{margin-bottom:0}
+.extra-row .chip{font-size:.78rem}
+.cpu-choice{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.cpu-choice button{border:2px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);padding:5px 3px;font:inherit;font-size:.75rem;cursor:pointer;min-width:0}
+.cpu-choice button[aria-pressed="true"]{border-color:var(--accent);background:var(--chipbg)}
+.cpu-choice img{display:block;width:100%;height:58px;object-fit:contain}
+
+
+  /* Custom illustrated Start Match button */
+  .start-match.start-match-image{display:block;width:100%;max-width:100%;padding:0;margin:12px auto 16px;border:0;border-radius:0;background:transparent;box-shadow:none;overflow:hidden;line-height:0;cursor:pointer}
+  .start-match.start-match-image img{display:block;width:100%;height:auto;object-fit:contain;border:0;border-radius:0}
+  .start-match.start-match-image:active{transform:scale(.985);box-shadow:none}
+  .start-match.start-match-image[hidden]{display:none}
+
+
+
+/* Sora dedicated marks: centered independently of intrinsic image dimensions. */
+.cell{position:relative}
+.cell img.sora-mark{position:absolute!important;left:50%!important;top:50%!important;width:112%!important;height:112%!important;max-width:none!important;max-height:none!important;object-fit:contain;display:block;margin:0!important;transform:translate(-50%,-50%)!important;transform-origin:50% 50%;z-index:2;pointer-events:none}
+/* Sora only: sway the newly placed mark in the wind. Uses individual transform
+   properties so the centering transform above remains untouched. */
+.cell.pop-s img.sora-mark{
+  animation:soraMarkWind .52s cubic-bezier(.2,.72,.28,1) both;
+  transform-origin:50% 50%;
+}
+@keyframes soraMarkWind{
+  0%{rotate:-9deg;scale:.78 .94;opacity:0}
+  24%{rotate:7deg;scale:1.08 .96;opacity:1}
+  48%{rotate:-5deg;scale:.97 1.03;opacity:1}
+  70%{rotate:3deg;scale:1.03 .99;opacity:1}
+  86%{rotate:-1.5deg;scale:.995 1.005;opacity:1}
+  100%{rotate:0deg;scale:1 1;opacity:1}
+}
+@media(prefers-reduced-motion:reduce){
+  .cell.pop-s img.sora-mark{animation:none!important;rotate:0deg!important;scale:1!important}
+}
+/* Aoi: dedicated crystal marks and a crisp, temporary placement animation */
+.cell img.aoi-crystal-mark{
+  position:absolute;left:50%;top:50%;width:96%;height:96%;
+  max-width:none;max-height:none;object-fit:contain;
+  transform:translate(-50%,-50%);margin:0;
+}
+.cell.pop-a{z-index:2}
+.cell.pop-a img.aoi-crystal-mark{animation:aoiCrystalPlace .52s cubic-bezier(.16,1.25,.3,1) both}
+@keyframes aoiCrystalPlace{
+  0%{transform:translate(-50%,-50%) scale(.28) rotate(-28deg);opacity:0;filter:brightness(1.8) drop-shadow(0 0 10px rgba(90,220,255,.95))}
+  45%{transform:translate(-50%,-50%) scale(1.12) rotate(7deg);opacity:1;filter:brightness(1.25) drop-shadow(0 0 12px rgba(65,205,255,.9))}
+  75%{transform:translate(-50%,-50%) scale(.96) rotate(-2deg);opacity:1;filter:drop-shadow(0 0 5px rgba(95,220,255,.65))}
+  100%{transform:translate(-50%,-50%) scale(1) rotate(0);opacity:1;filter:none}
+}
+@media (prefers-reduced-motion:reduce){.cell.pop-a img.aoi-crystal-mark{animation:none!important}}
+
+
+/* Aoi Freeze Lock: one-turn blocked square */
+.cell{overflow:hidden}
+.cell.skin-on img.freeze-lock-overlay,
+#board .cell img.freeze-lock-overlay{
+  position:absolute!important;left:0!important;top:0!important;right:0!important;bottom:0!important;
+  z-index:6;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;
+  box-sizing:border-box;object-fit:contain;display:block;margin:0!important;padding:0!important;
+  pointer-events:none;transform-origin:50% 50%;
+  animation:freezeLockIn .42s cubic-bezier(.16,1.25,.35,1) both;
+  filter:drop-shadow(0 0 7px rgba(76,205,255,.9));
+}
+@keyframes freezeLockIn{
+  0%{opacity:0;transform:scale(.08) rotate(-42deg);filter:brightness(3) drop-shadow(0 0 22px #fff)}
+  38%{opacity:1;transform:scale(1.22) rotate(9deg);filter:brightness(1.8) drop-shadow(0 0 22px #42dfff)}
+  62%{transform:scale(.92) rotate(-4deg)}
+  82%{transform:scale(1.06) rotate(2deg)}
+  100%{opacity:1;transform:scale(1) rotate(0);filter:brightness(1) drop-shadow(0 0 10px #42dfff)}
+}
+#board .cell.freeze-breaking{
+  z-index:8;
+  animation:freezeCellBreak .72s ease-out both;
+}
+#board .cell.freeze-breaking::after{
+  content:'✦';
+  position:absolute;inset:-8%;z-index:9;display:flex;align-items:center;justify-content:center;
+  color:#e9fcff;font-size:clamp(2rem,10vw,4.5rem);font-weight:900;pointer-events:none;
+  text-shadow:0 0 8px #fff,0 0 18px #42dfff,0 0 30px #168bff;
+  animation:freezeShatter .72s ease-out both;
+}
+#board .cell.freeze-breaking img.freeze-lock-overlay{
+  animation:freezeLockShatter .72s ease-out both!important;
+}
+@keyframes freezeCellBreak{
+  0%,35%{filter:brightness(1.7);transform:scale(1.04)}
+  55%{filter:brightness(2.4);transform:scale(.96)}
+  100%{filter:brightness(1);transform:scale(1)}
+}
+@keyframes freezeShatter{
+  0%{opacity:0;transform:scale(.2) rotate(0)}
+  30%{opacity:1;transform:scale(1.25) rotate(35deg)}
+  100%{opacity:0;transform:scale(2.1) rotate(100deg)}
+}
+@keyframes freezeLockShatter{
+  0%{opacity:1;transform:scale(1)}
+  35%{opacity:1;transform:scale(1.12) rotate(5deg);filter:brightness(2.5)}
+  100%{opacity:0;transform:scale(.55) rotate(-22deg);filter:brightness(3)}
+}
+@media(prefers-reduced-motion:reduce){
+  .cell .freeze-lock-overlay,#board .cell.freeze-breaking,#board .cell.freeze-breaking::after{animation:none!important}
+}
+
+</style>
+<style id="welza-blackhole-magic-overlay">
+/* Welza only: black-hole magic video after her cut-in. */
+#stage video.welza-blackhole-magic-fx{
+  position:absolute;left:-9%;top:-9%;width:118%;height:118%;
+  object-fit:contain;display:block;z-index:10;pointer-events:none;
+  filter:drop-shadow(0 0 18px rgba(175,70,255,.72));
+}
+@media(prefers-reduced-motion:reduce){#stage video.welza-blackhole-magic-fx{filter:none}}
+</style>
+
+<meta name="theme-color" content="#172554">
+<meta name="application-name" content="マルバツバトル">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="マルバツバトル">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+
+<style id="sora-shuffle-animation">
+/* Sora: one clean clockwise wave, center first and then each square ring. */
+#stage.sora-wind{filter:drop-shadow(0 0 18px rgba(73,205,112,.72));}
+#stage .cell.sora-shuffling{
+  animation:soraWhirlOneTurn .82s cubic-bezier(.24,.68,.22,1) both;
+  transform-origin:50% 50%;
+  will-change:transform,opacity,filter;
+  z-index:4;
+}
+@keyframes soraWhirlOneTurn{
+  0%{transform:translate3d(0,0,0) rotate(0deg) scale(1);opacity:1;filter:brightness(1)}
+  24%{transform:translate3d(calc(var(--wind-x)*.55),calc(var(--wind-y)*.55),0) rotate(86deg) scale(.88);opacity:.92;filter:brightness(1.22)}
+  62%{transform:translate3d(var(--wind-x),var(--wind-y),0) rotate(245deg) scale(.91);opacity:.96;filter:brightness(1.42)}
+  86%{transform:translate3d(calc(var(--wind-x)*-.2),calc(var(--wind-y)*-.2),0) rotate(332deg) scale(1.07);opacity:1;filter:brightness(1.2)}
+  100%{transform:translate3d(0,0,0) rotate(360deg) scale(1);opacity:1;filter:brightness(1)}
+}
+@media(prefers-reduced-motion:reduce){
+  #stage.sora-wind{filter:none!important}
+  #stage .cell.sora-shuffling{animation:none!important;will-change:auto}
+}
+</style>
+
+<style id="sora-tornado-overlay">
+/* Sora only: show the supplied transparent tornado video large over the board. */
+#stage{position:relative}
+#stage video.sora-tornado-fx{
+  position:absolute;left:-9%;top:-9%;width:118%;height:118%;
+  object-fit:contain;display:block;z-index:8;pointer-events:none;
+  filter:drop-shadow(0 0 12px rgba(64,210,105,.42));
+}
+@media(prefers-reduced-motion:reduce){
+  #stage video.sora-tornado-fx{filter:none}
+}
+</style>
+<style id="haru-swap-magic-overlay">
+/* Haru only: spatial swap magic video after her cut-in. */
+#stage video.haru-swap-magic-fx{
+  position:absolute;left:-9%;top:-9%;width:118%;height:118%;
+  object-fit:contain;display:block;z-index:9;pointer-events:none;
+  filter:drop-shadow(0 0 16px rgba(255,190,255,.62));
+}
+@media(prefers-reduced-motion:reduce){
+  #stage video.haru-swap-magic-fx{filter:none}
+}
+</style>
+<style id="luna-magic-circle-overlay">
+/* Luna only: purple magic-circle video after her cut-in. */
+#stage video.luna-magic-fx{
+  position:absolute;left:-9%;top:-9%;width:118%;height:118%;
+  object-fit:contain;display:block;z-index:9;pointer-events:none;
+  filter:drop-shadow(0 0 14px rgba(180,90,255,.58));
+}
+@media(prefers-reduced-motion:reduce){
+  #stage video.luna-magic-fx{filter:none}
+}
+</style>
+<style id="mika-magic-circle-overlay">
+/* Mika only: show the pink magic-circle video after her cut-in. */
+#stage video.mika-magic-circle-fx{
+  position:absolute;left:-9%;top:-9%;width:118%;height:118%;
+  object-fit:contain;display:block;z-index:9;pointer-events:none;
+  filter:drop-shadow(0 0 14px rgba(255,105,180,.58));
+}
+@media(prefers-reduced-motion:reduce){
+  #stage video.mika-magic-circle-fx{filter:none}
+}
+</style>
+<style id="aoi-magic-circle-overlay">
+/* Aoi only: play the blue ice magic-circle sequence after her cut-in. */
+#stage video.aoi-magic-circle-fx{
+  position:absolute;left:-9%;top:-9%;width:118%;height:118%;
+  object-fit:contain;display:block;z-index:9;pointer-events:none;
+  filter:drop-shadow(0 0 14px rgba(75,170,255,.55));
+}
+@media(prefers-reduced-motion:reduce){
+  #stage video.aoi-magic-circle-fx{filter:none}
+}
+</style>
+
+<style id="welza-blackhole-board-mark">
+#board .cell img.blackhole-mark,#board .cell img.blackhole-child-mark{
+ position:absolute!important;left:50%!important;top:50%!important;width:108%!important;height:108%!important;
+ max-width:none!important;max-height:none!important;object-fit:contain;display:block;margin:0!important;
+ transform:translate(-50%,-50%);pointer-events:none;z-index:7;
+}
+#board .cell img.blackhole-child-mark{width:96%!important;height:96%!important;z-index:8;filter:drop-shadow(0 0 7px rgba(180,70,255,.9))}
+#board .cell:has(img.blackhole-mark),#board .cell:has(img.blackhole-child-mark){overflow:visible}
+
+#board .cell img.blackhole-mark{transition:opacity .52s ease,filter .52s ease;}
+#board .cell img.blackhole-mark.blackhole-fade-out{opacity:0!important;filter:blur(9px) brightness(2.2)!important;}
+#board .cell img.blackhole-child-mark{animation:blackholeChildOut .42s ease-in both;}
+@keyframes blackholeChildOut{to{opacity:0;transform:translate(-50%,-50%) scale(.35);filter:blur(7px) brightness(2)}}
+</style>
+
+<style id="welza-pixel-art-card-fix">
+/* Keep Welza's supplied pixel-art portrait crisp and fully visible in the character selection card. */
+.card img.sp.welza-pixel-art{width:100%;height:150px;max-height:150px;object-fit:contain;image-rendering:pixelated;image-rendering:crisp-edges;background:transparent}
+</style>
+
+<style id="welza-dedicated-marks-and-swirl">
+/* Welza O/X: centered vortex reveal. The mark never travels or rotates; only scale/opacity change. */
+#board .cell img.welza-mark{
+  position:absolute!important;left:50%!important;top:50%!important;
+  width:94%!important;height:94%!important;max-width:none!important;max-height:none!important;
+  object-fit:contain;display:block;margin:0!important;
+  transform:translate(-50%,-50%);transform-origin:50% 50%;
+  pointer-events:none;z-index:3;backface-visibility:hidden;
+}
+#board .cell.pop-w{z-index:5;isolation:isolate;}
+#board .cell.pop-w::before{
+  content:"";position:absolute;left:15%;top:15%;width:70%;height:70%;border-radius:50%;
+  pointer-events:none;z-index:2;opacity:0;
+  background:conic-gradient(from 0deg,transparent 0 20%,rgba(190,92,255,.9) 27%,rgba(255,218,130,.82) 31%,transparent 39% 66%,rgba(168,76,255,.82) 74%,transparent 82% 100%);
+  filter:blur(3px) drop-shadow(0 0 7px rgba(174,74,255,.8));
+  animation:welzaVortexRing .78s ease-out both;
+}
+#board .cell.pop-w img.welza-mark{
+  animation:welzaVortexMarkIn .78s cubic-bezier(.2,.78,.25,1) both;
+  filter:drop-shadow(0 0 6px rgba(173,67,255,.85)) drop-shadow(0 0 12px rgba(255,197,92,.42));
+}
+@keyframes welzaVortexRing{
+  0%{transform:rotate(-70deg) scale(.55);opacity:0}
+  30%{opacity:.82}
+  100%{transform:rotate(250deg) scale(1.12);opacity:0}
+}
+@keyframes welzaVortexMarkIn{
+  /* Stay anchored in the exact center: no vertical/lateral travel and no rotation.
+     The surrounding energy ring supplies the vortex motion instead. */
+  0%{scale:.72;opacity:0;filter:blur(7px) brightness(2.1) drop-shadow(0 0 20px #a64dff)}
+  42%{scale:1.035;opacity:1;filter:blur(1px) brightness(1.45) drop-shadow(0 0 16px #c77aff)}
+  72%{scale:.985;opacity:1;filter:blur(0) brightness(1.12) drop-shadow(0 0 12px #d28aff)}
+  100%{scale:1;opacity:1;filter:drop-shadow(0 0 7px rgba(173,67,255,.65))}
+}
+@media(prefers-reduced-motion:reduce){#board .cell.pop-w::before,#board .cell.pop-w img.welza-mark{animation:none!important;rotate:0deg!important;scale:1!important;filter:none!important}}
+</style>
+</head>
+<body>
+<main>
+  <h1 class="title-logo"><img src="assets/asset_001.webp" alt="マルバツゲーム"></h1>
+  <div class="opts" role="group" aria-label="ばんのおおきさ">
+    <button class="chip" data-k="size" data-v="3" aria-pressed="true">3×3</button>
+    <button class="chip" data-k="size" data-v="5" aria-pressed="false">5×5</button>
+  </div>
+  <section class="skin-pick" aria-label="マス目デザイン">
+    <div class="skin-title">盤面の背景デザインを選んでね</div>
+    <div id="skinChoices" class="skin-choices"></div>
+  </section>
+  <div class="opts" role="group" aria-label="あそび方">
+    <button class="chip" data-k="mode" data-v="strong" aria-pressed="true">CPU(つよい)</button>
+    <button class="chip" data-k="mode" data-v="weak" aria-pressed="false">CPU(よわい)</button>
+    <button class="chip" data-k="mode" data-v="two" aria-pressed="false">2人</button>
+    <button class="chip" data-k="mode" data-v="watch" aria-pressed="false">CPU同士を観戦</button>
+    <button class="chip" data-k="mode" data-v="net" aria-pressed="false">通信対戦</button>
+  </div>
+  <div class="opts" role="group" aria-label="演出">
+    <button class="chip" data-k="fx" data-v="1" aria-pressed="true">演出:あり</button>
+    <button class="chip" data-k="fx" data-v="0" aria-pressed="false">演出:なし</button>
+  </div>
+  <section class="extra-setting" aria-label="追加設定">
+    <div class="extra-title">♪ サウンド</div>
+    <div class="extra-row" role="group" aria-label="サウンド設定">
+      <button class="chip" data-k="sound" data-v="1" aria-pressed="true">音: ON</button>
+      <button class="chip" data-k="sound" data-v="0" aria-pressed="false">音: OFF</button>
+    </div>
+    <div id="firstControls">
+      <div class="extra-title">先攻・後攻</div>
+      <div class="extra-row" role="group" aria-label="先攻後攻設定">
+        <button class="chip" data-k="first" data-v="O" aria-pressed="true" id="firstO">自分が先攻</button>
+        <button class="chip" data-k="first" data-v="X" aria-pressed="false" id="firstX">自分が後攻</button>
+      </div>
+    </div>
+  </section>
+  <div class="opts" role="group" aria-label="必殺技で仕留める">
+    <button class="chip" data-k="kill" data-v="0" aria-pressed="true">技で仕留め:なし</button>
+    <button class="chip" data-k="kill" data-v="1" aria-pressed="false">技で仕留め:あり</button>
+  </div>
+  <div class="opts" role="group" aria-label="必殺技回数">
+    <button class="chip" data-k="skills" data-v="0" aria-pressed="false">無し</button>
+    <button class="chip" data-k="skills" data-v="1" aria-pressed="true">1回</button>
+    <button class="chip" data-k="skills" data-v="2" aria-pressed="false">2回</button>
+    <button class="chip" data-k="skills" data-v="inf" aria-pressed="false">∞</button>
+  </div>
+  <div id="netbox" hidden><div class="opts"><input id="code" maxlength="20" placeholder="合言葉(英数字)" autocapitalize="off" autocomplete="off"><button class="nbtn" id="bMk" type="button">つくる</button><button class="nbtn" id="bJoin" type="button">参加</button><button class="nbtn" id="bReady" type="button" hidden>準備OK</button></div><div class="nm" id="netmsg">同じ合言葉を入れた2人で対戦できます。相手にも同じリンクを開いてもらってね。</div></div>
+  <div id="pick"></div>
+  <div id="rule"></div>
+  <div id="status" role="status" aria-live="polite"></div>
+  <button id="startMatch" class="start-match start-match-image" type="button" aria-label="試合開始" hidden><img src="assets/asset_002.webp" alt="試合開始！"></button>
+  <div id="note"></div>
+  <div id="cut" aria-hidden="true"><div class="ci"><img alt=""><div class="nm"></div><div class="fl"></div></div></div>
+  <div id="victory" role="dialog" aria-label="勝利" aria-modal="true"><div class="victory-card"><img alt=""><div class="v-hint">タップして閉じる</div></div></div>
+  <div id="stage"><div id="board"></div><div id="banner"></div><canvas id="fxc"></canvas></div>
+  <div id="skills"></div>
+  <div class="score" id="score"></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+(function(){
+  var IMG={"sp":{"mika":"assets/asset_003.webp","luna":"assets/asset_004.webp","haru":"assets/asset_005.webp"},"cut":{"mika":"assets/asset_006.webp","luna":"assets/asset_007.webp","haru":"assets/asset_008.webp"},"m":{"O":{"mika":"assets/asset_009.webp","luna":"assets/asset_010.webp","haru":"assets/asset_011.webp","sora":"assets/asset_012.webp"},"X":{"mika":"assets/asset_013.webp","luna":"assets/asset_014.webp","haru":"assets/asset_015.webp","sora":"assets/asset_016.webp","welza":"assets/asset_017.png"}}};
+  IMG.victory={"aoi":"assets/asset_018.webp","mika":"assets/asset_019.webp","luna":"assets/asset_020.webp","haru":"assets/asset_021.webp","welza":"assets/asset_022.jpg"};
+  IMG.skillButton={"haru":"assets/asset_023.webp","mika":"assets/asset_024.webp","luna":"assets/asset_025.webp"};
+  IMG.draw="assets/asset_026.webp";
+  IMG.tiles={"heart":"assets/asset_027.webp","moon":"assets/asset_028.webp","gear":"assets/asset_029.webp","flower":"assets/asset_030.webp","crown":"assets/asset_031.webp","sakura":"assets/asset_032.webp"};
+  // Aoi: selectable character portrait. Existing O/X mark artwork is reused until Aoi's dedicated marks are supplied.
+  IMG.sp.aoi='assets/asset_033.png';
+  // Sora: user-provided selectable character portrait.
+  IMG.sp.sora='assets/asset_034.webp';
+  IMG.skillButton.sora='assets/asset_035.png';
+  // Aoi's dedicated crystal O/X marks (transparent backgrounds).
+  IMG.m.O.aoi='assets/asset_036.webp';
+  IMG.m.X.aoi='assets/asset_037.webp'
+  // Sora's dedicated transparent O/X marks.
+  IMG.m.O.sora='assets/asset_038.webp';
+  IMG.m.X.sora='assets/asset_039.webp';
+;
+  IMG.skillButton.aoi=IMG.skillButton.luna;
+  // Aoi Freeze Lock skill art supplied for this version.
+  IMG.cut.aoi='assets/asset_040.webp';
+  IMG.cut.sora='assets/asset_041.webp'
+  // Welza special-move cut-in artwork supplied by the user.
+  IMG.cut.welza='assets/asset_042.webp';
+  // Sora's dedicated victory illustration.
+  IMG.victory.sora='assets/asset_043.webp';
+;
+  IMG.lockAoi='assets/asset_044.png';
+  IMG.skillButton.aoi='assets/asset_045.webp';
+  // Welza dedicated special-move button artwork
+  IMG.skillButton.welza='assets/asset_046.png';
+  var cfg={size:3,mode:'strong',skills:1,kill:false,fx:true,skin:'simple',cpuChar:'luna'};
+  var soundEnabled=true;try{soundEnabled=localStorage.getItem('marubatsu_sound')!=='off';}catch(e){}
+  var soraVictoryVoice=new Audio('assets/asset_047.mp3');soraVictoryVoice.preload='auto';soraVictoryVoice.volume=1.0;
+  /* Explicitly refresh Welza's selectable character-frame artwork with the supplied pixel-art image. */
+  IMG.sp.welza='assets/asset_048.png';
+  IMG.m.O.welza='assets/asset_049.webp';
+  IMG.m.X.welza='assets/asset_050.webp';
+  var CH={
+    mika:{name:'ミカ',hair:'#ff7fa8',eye:'#d63a6a',style:'twin',acc:'#fff',skill:'erase',icon:'💥',sname:'ぷちっとデリート',desc:'相手の印を2つ消す',line:'ぷちっと2つ、消しちゃうよ!'},
+    luna:{name:'ルナ',hair:'#9b8cff',eye:'#5a3fd1',style:'long',acc:'#ffe27a',skill:'flip',icon:'🔄',sname:'ムーンチェンジ',desc:'相手の印を自分のものに',line:'ぜんぶ私のものにしちゃう!'},
+    haru:{name:'ハル',hair:'#ffa94d',eye:'#2f8f5b',style:'short',acc:'#ff6f8f',skill:'swap',icon:'🔀',sname:'ばしょチェンジ',desc:'自分と相手の印の場所を入れ替える',line:'えいっ、場所を入れ替えちゃう!'},
+    aoi:{name:'アオイ',hair:'#72dfff',eye:'#268fe8',style:'long',acc:'#8eeaff',skill:'freeze',icon:'❄️',sname:'フリーズロック',desc:'相手の最善手を1ターン封鎖',line:'その一手、凍らせるよ!'},
+    sora:{name:'ソラ',hair:'#b8e77a',eye:'#d99b32',style:'braid',acc:'#2f9b55',skill:'shuffle',icon:'🌪️',sname:'ウィンドシャッフル',desc:'盤面の○・×・空きマスをすべてランダムに再配置',line:'あわわっ！風でぐちゃぐちゃ〜！'},
+    welza:{name:'ヴェルザ',hair:'#f2e8ff',eye:'#f04b83',style:'long',acc:'#f5c84b',skill:'blackhole',icon:'🌀',sname:'ブラックホール',desc:'周囲2マスを吸収し、盤面にブラックホールを残す',line:'さあ、すべてを飲み込みなさい!'}
+  };
+  var IDS=['mika','luna','haru','aoi','sora','welza'];
+  IDS.forEach(function(id){CH[id].id=id;});
+  var GL={mika:'#ff3d8b',luna:'#8a4dff',haru:'#ff9f1c',aoi:'#38cfff',sora:'#55c878',welza:'#b54cff'};
+  function av(c){return '<img alt="'+c.name+'" src="'+IMG.sp[c.id]+'">';}
+  var chars={O:'mika',X:'luna'},cpuSkillUnlockAt={O:3,X:3},warpFrom=-1,first='O',firstChoice='O',humanMark='O',humanChar='mika',fxk={},prevB=[],popUntil={},gameStarted=false;
+  var lobby=null,room=null,myRole='O',myCh='mika',round=0,lg='',applied=0,remote=false,netOn=false,ready=false,lastPub='',isHost=false,startRequested=false,hostRules=null;
+  function local(p){return cfg.mode==='net'?p===myRole:cfg.mode==='two'?true:p===humanMark;}
+  function ch(p){return CH[chars[p]];}
+  var cutT=0,victoryT=0,victoryHideT=0;
+  function hideVictory(){
+    clearTimeout(victoryT);clearTimeout(victoryHideT);
+    var v=document.getElementById('victory');v.className='';v.setAttribute('aria-hidden','true');
+    // Return to the normal BGM only after the result effect has finished or is dismissed.
+    if(battleStarted)returnToNormalBgm();
+    // After a CPU match ends, bring back the Start button once the result animation closes.
+    if(over&&(cfg.mode==='strong'||cfg.mode==='weak'||cfg.mode==='two'||cfg.mode==='watch')){
+      var startBtn=document.getElementById('startMatch');
+      if(startBtn)startBtn.hidden=false;
+    }
+  }
+  function showVictory(p){
+    var id=chars[p],v=document.getElementById('victory');
+    if(!IMG.victory[id])return;
+    if(id==='aoi'){try{aoiVictoryVoice.pause();aoiVictoryVoice.currentTime=0;var aoiWinPlay=aoiVictoryVoice.play();if(aoiWinPlay&&aoiWinPlay.catch)aoiWinPlay.catch(function(){});}catch(err){}}
+    else if(id==='haru')playHaruVictoryVoice();
+    else if(id==='luna')playLunaVictoryVoice();
+    else if(id==='mika')playMikaVictoryVoice();
+    else if(id==='welza')playWelzaVictoryVoice();
+    else if(id==='sora')playSoraVictoryVoice();
+    clearTimeout(victoryHideT);
+    v.querySelector('img').src=IMG.victory[id];
+    v.className=id+' on';v.setAttribute('aria-label','勝利');v.setAttribute('aria-hidden','false');
+    victoryHideT=setTimeout(hideVictory,4200);
+  }
+  startNormalBgm();
+  // Mobile browsers often block autoplay. Retry directly from the first real user gesture.
+  ['pointerdown','touchend','click','keydown'].forEach(function(ev){
+    document.addEventListener(ev,function(){startNormalBgm();},{capture:true,passive:true});
+  });
+  function playDrawVoice(){
+    try{drawVoice.pause();drawVoice.currentTime=0;var dp=drawVoice.play();if(dp&&dp.catch)dp.catch(function(){});}catch(err){}
+  }
+  function showDraw(){
+    playDrawVoice();
+    var v=document.getElementById('victory');
+    clearTimeout(victoryHideT);
+    v.querySelector('img').src=IMG.draw;
+    v.className='draw on';v.setAttribute('aria-label','引き分け');v.setAttribute('aria-hidden','false');
+    victoryHideT=setTimeout(hideVictory,4200);
+  }
+  document.getElementById('victory').addEventListener('click',hideVictory);
+  var welzaPlaceVoice = new Audio('assets/asset_051.mp3');
+  welzaPlaceVoice.preload='auto'; welzaPlaceVoice.volume=1.0;
+  function playWelzaPlaceVoice(){if(!soundEnabled)return;duckBgmForWelza(1200);try{welzaPlaceVoice.pause();welzaPlaceVoice.currentTime=0;var q=welzaPlaceVoice.play();if(q&&q.catch)q.catch(function(){});}catch(e){}}
+  var mikaSkillVoice = new Audio('assets/asset_052.mp3');
+  var mikaSkillSfx = new Audio('assets/asset_053.mp3');
+  var lunaSkillVoice = new Audio('assets/asset_054.wav');
+  var lunaSkillSfx = new Audio('assets/asset_055.mp3');
+  var haruSkillVoice = new Audio('assets/asset_056.mp3');
+  var haruSkillSfx = new Audio('assets/asset_057.mp3');
+  var haruVictoryVoice = new Audio('assets/asset_058.mp3');
+  var mikaVictoryVoice = new Audio('assets/asset_059.mp3');
+  // Welza's victory laugh: 「オーッホッホッホッホ」 (user supplied)
+  var welzaVictoryVoice = new Audio('assets/asset_060.mp3');
+  var welzaSkillVoice = new Audio('assets/asset_061.mp3');
+  // User-provided black-hole magic sound, trimmed to match the 2.17s magic animation.
+  var welzaBlackholeMagicAudio = new Audio('assets/asset_062.mp3');
+  welzaBlackholeMagicAudio.preload='auto';welzaBlackholeMagicAudio.volume=1.0;
+  welzaSkillVoice.preload='auto';
+  welzaSkillVoice.volume=1.0;
+  welzaVictoryVoice.preload='auto';
+
+  welzaVictoryVoice.volume=1.0;
+  // BGM volume remains unchanged during all Welza voices and effects.
+  var welzaBgmDuckTimer=null;
+  function duckBgmForWelza(ms){}
+
+  var lunaVictoryVoice = new Audio('assets/asset_063.wav');
+  var drawVoice = new Audio('assets/asset_064.mp3');
+  // Mika's mark placement sound
+  var mikaPlaceSfx = new Audio('assets/asset_065.mp3');
+  mikaPlaceSfx.preload = 'auto';
+  mikaPlaceSfx.volume = 0.75;
+  function playMikaPlaceSfx(){
+    try{mikaPlaceSfx.pause();mikaPlaceSfx.currentTime=0;var sp=mikaPlaceSfx.play();if(sp&&sp.catch)sp.catch(function(){});}catch(err){}
+  }
+
+  // Luna's mark placement sound
+  var lunaPlaceSfx = new Audio('assets/asset_066.mp3');
+  lunaPlaceSfx.preload = 'auto';
+  lunaPlaceSfx.volume = 0.75;
+  function playLunaPlaceSfx(){
+    try{lunaPlaceSfx.pause();lunaPlaceSfx.currentTime=0;var sp=lunaPlaceSfx.play();if(sp&&sp.catch)sp.catch(function(){});}catch(err){}
+  }
+  // Haru's mark placement sound
+  var haruPlaceSfx = new Audio('assets/asset_067.mp3');
+  haruPlaceSfx.preload = 'auto';
+  haruPlaceSfx.volume = 0.75;
+  function playHaruPlaceSfx(){
+    try{haruPlaceSfx.pause();haruPlaceSfx.currentTime=0;var sp=haruPlaceSfx.play();if(sp&&sp.catch)sp.catch(function(){});}catch(err){}
+  }
+  // Aoi's placement sound: a short, soft two-note crystal chime.
+  var aoiPlaceContext=null;
+  function playAoiPlaceSfx(){
+    if(!soundEnabled)return;
+    try{
+      var AudioCtx=window.AudioContext||window.webkitAudioContext;
+      if(!AudioCtx)return;
+      if(!aoiPlaceContext)aoiPlaceContext=new AudioCtx();
+      var ctx=aoiPlaceContext;
+      if(ctx.state==='suspended'){var resumePromise=ctx.resume();if(resumePromise&&resumePromise.catch)resumePromise.catch(function(){});}
+      var now=ctx.currentTime;
+      function tone(f1,f2,delay,duration,volume,type){
+        var t=now+delay,osc=ctx.createOscillator(),gain=ctx.createGain();
+        osc.type=type||'sine';
+        osc.frequency.setValueAtTime(f1,t);
+        osc.frequency.exponentialRampToValueAtTime(f2,t+duration);
+        gain.gain.setValueAtTime(.0001,t);
+        gain.gain.exponentialRampToValueAtTime(volume,t+.025);
+        gain.gain.exponentialRampToValueAtTime(.0001,t+duration);
+        osc.connect(gain);gain.connect(ctx.destination);
+        osc.start(t);osc.stop(t+duration+.03);
+      }
+      tone(1046,1568,0,.24,.042,'sine');
+      tone(1568,2093,.07,.28,.022,'sine');
+      tone(784,1175,.12,.30,.020,'triangle');
+    }catch(err){}
+  }
+  var normalBgm = new Audio('assets/asset_068.mp3');
+  normalBgm.loop = true; normalBgm.volume = 0.55; normalBgm.preload = 'auto';
+  var normalBgmStarted = false, normalBgmPending = false, battleStarted = false;
+  function startNormalBgm(){
+    if(!soundEnabled || battleStarted || normalBgmStarted || normalBgmPending)return;
+    normalBgmPending = true;
+    try{
+      var bp = normalBgm.play();
+      if(bp && bp.then){
+        bp.then(function(){normalBgmStarted=true;normalBgmPending=false;})
+          .catch(function(){normalBgmPending=false;});
+      }else{normalBgmStarted=true;normalBgmPending=false;}
+    }catch(err){normalBgmPending=false;}
+  }
+  normalBgm.addEventListener('playing',function(){normalBgmStarted=true;normalBgmPending=false;});
+  normalBgm.addEventListener('pause',function(){if(!battleStarted)normalBgmStarted=false;});
+  var battleBgm = new Audio('assets/asset_069.mp3');
+  battleBgm.loop = true;
+  battleBgm.volume = 0.55;
+  battleBgm.preload = 'auto';
+  var aoiFreezeDestroySfx = new Audio('assets/asset_070.mp3');
+  aoiFreezeDestroySfx.volume=0.9;
+  var aoiFreezeLockSfx = new Audio('assets/asset_071.mp3');
+  aoiFreezeLockSfx.volume=0.9;
+  var aoiPlaceSfx = new Audio('assets/asset_072.mp3');
+  aoiPlaceSfx.volume=0.9;
+  var aoiSkillVoice = new Audio('assets/asset_073.mp3');
+  aoiSkillVoice.volume=1.0;
+  var aoiVictoryVoice = new Audio('assets/asset_074.mp3');
+  aoiVictoryVoice.volume=1.0;
+
+  // Mika-only special-move magic sound, edited to fit the 2.1s magic-circle sequence.
+  var mikaMagicAudio = new Audio('assets/asset_075.mp3');
+  mikaMagicAudio.preload='auto';mikaMagicAudio.volume=1.0;
+  var gameAudios=[soraVictoryVoice,aoiVictoryVoice,aoiSkillVoice,aoiPlaceSfx,aoiFreezeLockSfx,aoiFreezeDestroySfx,mikaSkillVoice,mikaSkillSfx,lunaSkillVoice,lunaSkillSfx,haruSkillVoice,haruSkillSfx,haruMagicAudio,haruVictoryVoice,mikaVictoryVoice,lunaVictoryVoice,drawVoice,welzaVictoryVoice,welzaSkillVoice,welzaBlackholeMagicAudio,mikaMagicAudio,lunaMagicAudio,mikaPlaceSfx,lunaPlaceSfx,haruPlaceSfx,normalBgm,battleBgm,welzaPlaceVoice];
+  function applySoundSetting(){
+    gameAudios.forEach(function(a){try{a.muted=!soundEnabled;if(!soundEnabled)a.pause();}catch(e){}});
+    try{localStorage.setItem('marubatsu_sound',soundEnabled?'on':'off');}catch(e){}
+    if(soundEnabled){if(battleStarted){try{var q=battleBgm.play();if(q&&q.catch)q.catch(function(){});}catch(e){}}else startNormalBgm();}
+    document.querySelectorAll('.chip[data-k="sound"]').forEach(function(b){b.setAttribute('aria-pressed',String((b.getAttribute('data-v')==='1')===soundEnabled));});
+  }
+  function stopNormalBgm(){
+    try{normalBgm.pause();normalBgm.currentTime=0;}catch(err){}
+  }
+  function startBattleBgm(){
+    if(battleStarted)return;
+    battleStarted=true;
+    stopNormalBgm();
+    if(!soundEnabled)return;
+    try{
+      battleBgm.currentTime=0;
+      var battlePlay=battleBgm.play();
+      if(battlePlay && battlePlay.catch)battlePlay.catch(function(){battleStarted=false;});
+    }catch(err){battleStarted=false;}
+  }
+  function returnToNormalBgm(){
+    battleStarted=false;
+    try{battleBgm.pause();battleBgm.currentTime=0;}catch(err){}
+    normalBgmStarted=false;
+    normalBgmPending=false;
+    startNormalBgm();
+  }
+  function playLunaVictoryVoice(){
+    try{lunaVictoryVoice.pause();lunaVictoryVoice.currentTime=0;var lp=lunaVictoryVoice.play();if(lp&&lp.catch)lp.catch(function(){});}catch(err){}
+  }
+  function playHaruVictoryVoice(){
+    try{haruVictoryVoice.pause();haruVictoryVoice.currentTime=0;var vp=haruVictoryVoice.play();if(vp&&vp.catch)vp.catch(function(){});}catch(err){}
+  }
+  function playWelzaVictoryVoice(){
+    if(!soundEnabled)return;
+    duckBgmForWelza(2400);
+    try{welzaVictoryVoice.pause();welzaVictoryVoice.currentTime=0;var wp=welzaVictoryVoice.play();if(wp&&wp.catch)wp.catch(function(){});}catch(err){}
+  }
+  function playSoraVictoryVoice(){
+    if(!soundEnabled)return;
+    try{soraVictoryVoice.pause();soraVictoryVoice.currentTime=0;soraVictoryVoice.volume=1.0;var sp=soraVictoryVoice.play();if(sp&&sp.catch)sp.catch(function(){});}catch(err){}
+  }
+  function playMikaVictoryVoice(){
+    try{mikaVictoryVoice.pause();mikaVictoryVoice.currentTime=0;var mp=mikaVictoryVoice.play();if(mp&&mp.catch)mp.catch(function(){});}catch(err){}
+  }
+  // Sora only: green clover magic-circle tornado video (VP9 WebM, embedded for single-file use).
+  var SORA_TORNADO_VIDEO='assets/asset_076.webm';
+  function playSoraTornado(done){
+    var stage=document.getElementById('stage');
+    var video=document.createElement('video');
+    var finished=false,timer=null;
+    video.className='sora-tornado-fx';
+    video.setAttribute('aria-hidden','true');
+    video.setAttribute('playsinline','');
+    video.setAttribute('webkit-playsinline','');
+    video.muted=true;video.autoplay=true;video.preload='auto';
+    video.src=SORA_TORNADO_VIDEO;
+    function finish(){
+      if(finished)return;finished=true;
+      if(timer)clearTimeout(timer);
+      video.pause();video.removeAttribute('src');
+      try{video.load();}catch(err){}
+      if(video.parentNode)video.parentNode.removeChild(video);
+      if(typeof done==='function')done();
+    }
+    video.addEventListener('ended',finish,{once:true});
+    video.addEventListener('error',finish,{once:true});
+    stage.appendChild(video);
+    playSoraTornadoSfx();
+    timer=setTimeout(finish,2200);
+    try{var playPromise=video.play();if(playPromise&&playPromise.catch)playPromise.catch(function(){finish();});}
+    catch(err){finish();}
+  }
+  // Haru only: spatial-swap magic video, embedded for single-file use.
+  var HARU_SWAP_MAGIC_VIDEO='assets/asset_077.webm';
+  // Haru-only special-move magic sound, trimmed to match the spatial-swap magic animation.
+  var haruMagicAudio=new Audio('assets/asset_078.mp3');
+  haruMagicAudio.preload='auto';haruMagicAudio.volume=1.0;
+  function playHaruMagicAudio(){try{haruMagicAudio.pause();haruMagicAudio.currentTime=0;var p=haruMagicAudio.play();if(p&&p.catch)p.catch(function(){});}catch(err){}}
+  function playHaruSwapMagic(done){
+    var stage=document.getElementById('stage');
+    var video=document.createElement('video');
+    var finished=false,timer=null;
+    video.className='haru-swap-magic-fx';
+    video.setAttribute('aria-hidden','true');
+    video.setAttribute('playsinline','');
+    video.setAttribute('webkit-playsinline','');
+    video.muted=true;video.autoplay=true;video.preload='auto';
+    video.src=HARU_SWAP_MAGIC_VIDEO;
+    function finish(){
+      if(finished)return;finished=true;
+      if(timer)clearTimeout(timer);
+      video.pause();video.removeAttribute('src');
+      try{video.load();}catch(err){}
+      if(video.parentNode)video.parentNode.removeChild(video);
+      if(typeof done==='function')done();
+    }
+    video.addEventListener('ended',finish,{once:true});
+    video.addEventListener('error',finish,{once:true});
+    stage.appendChild(video);
+    playHaruMagicAudio();
+    timer=setTimeout(finish,2200);
+    try{var playPromise=video.play();if(playPromise&&playPromise.catch)playPromise.catch(function(){finish();});}
+    catch(err){finish();}
+  }
+  // Luna only: purple magic-circle video, embedded for single-file use.
+  var LUNA_MAGIC_VIDEO='assets/asset_079.webm';
+  // Luna-only magic effect sound, trimmed to match the 2.1s magic-circle video.
+  var lunaMagicAudio=new Audio('assets/asset_080.mp3');
+  lunaMagicAudio.preload='auto';lunaMagicAudio.volume=0.95;
+  function playLunaMagicAudio(){try{lunaMagicAudio.pause();lunaMagicAudio.currentTime=0;var p=lunaMagicAudio.play();if(p&&p.catch)p.catch(function(){});}catch(err){}}
+  function playLunaMagic(done){
+    var stage=document.getElementById('stage');
+    var video=document.createElement('video');
+    var finished=false,timer=null;
+    video.className='luna-magic-fx';
+    video.setAttribute('aria-hidden','true');
+    video.setAttribute('playsinline','');
+    video.setAttribute('webkit-playsinline','');
+    video.muted=true;video.autoplay=true;video.preload='auto';
+    video.src=LUNA_MAGIC_VIDEO;
+    function finish(){
+      if(finished)return;finished=true;
+      if(timer)clearTimeout(timer);
+      video.pause();video.removeAttribute('src');
+      try{video.load();}catch(err){}
+      if(video.parentNode)video.parentNode.removeChild(video);
+      if(typeof done==='function')done();
+    }
+    video.addEventListener('ended',finish,{once:true});
+    video.addEventListener('error',finish,{once:true});
+    stage.appendChild(video);
+    playLunaMagicAudio();
+    timer=setTimeout(finish,2100);
+    try{var playPromise=video.play();if(playPromise&&playPromise.catch)playPromise.catch(function(){finish();});}
+    catch(err){finish();}
+  }
+  // Mika only: pink magic-circle video, embedded for single-file use.
+  var MIKA_MAGIC_CIRCLE_VIDEO='assets/asset_081.webm';
+  function playMikaMagicCircle(done){
+    if(soundEnabled){try{mikaMagicAudio.pause();mikaMagicAudio.currentTime=0;mikaMagicAudio.volume=1.0;var mikaMagicPlay=mikaMagicAudio.play();if(mikaMagicPlay&&mikaMagicPlay.catch)mikaMagicPlay.catch(function(){});}catch(err){}}
+    var stage=document.getElementById('stage');
+    var video=document.createElement('video');
+    var finished=false,timer=null;
+    video.className='mika-magic-circle-fx';
+    video.setAttribute('aria-hidden','true');
+    video.setAttribute('playsinline','');
+    video.setAttribute('webkit-playsinline','');
+    video.muted=true;video.autoplay=true;video.preload='auto';
+    video.src=MIKA_MAGIC_CIRCLE_VIDEO;
+    function finish(){
+      if(finished)return;finished=true;
+      if(timer)clearTimeout(timer);
+      video.pause();video.removeAttribute('src');
+      try{video.load();}catch(err){}
+      if(video.parentNode)video.parentNode.removeChild(video);
+      if(typeof done==='function')done();
+    }
+    video.addEventListener('ended',finish,{once:true});
+    video.addEventListener('error',finish,{once:true});
+    stage.appendChild(video);
+    timer=setTimeout(finish,2100);
+    try{var playPromise=video.play();if(playPromise&&playPromise.catch)playPromise.catch(function(){finish();});}
+    catch(err){finish();}
+  }
+  // Aoi only: blue ice magic-circle video, embedded for single-file use.
+  var AOI_MAGIC_CIRCLE_VIDEO='assets/asset_082.webm';
+  // Aoi only: dedicated ice-freeze magic sound, trimmed to match the 2.1s magic-circle video.
+  var aoiMagicSfx = new Audio('assets/asset_083.mp3');
+  aoiMagicSfx.preload='auto';aoiMagicSfx.volume=1.0;
+  function playAoiMagicCircle(done){
+    if(soundEnabled){try{aoiMagicSfx.pause();aoiMagicSfx.currentTime=0;aoiMagicSfx.volume=1.0;var aoiMagicPlay=aoiMagicSfx.play();if(aoiMagicPlay&&aoiMagicPlay.catch)aoiMagicPlay.catch(function(){});}catch(err){}}
+    var stage=document.getElementById('stage');
+    var video=document.createElement('video');
+    var finished=false,timer=null;
+    video.className='aoi-magic-circle-fx';
+    video.setAttribute('aria-hidden','true');
+    video.setAttribute('playsinline','');
+    video.setAttribute('webkit-playsinline','');
+    video.muted=true;video.autoplay=true;video.preload='auto';
+    video.src=AOI_MAGIC_CIRCLE_VIDEO;
+    function finish(){
+      if(finished)return;finished=true;
+      if(timer)clearTimeout(timer);
+      video.pause();video.removeAttribute('src');
+      try{video.load();}catch(err){}
+      if(video.parentNode)video.parentNode.removeChild(video);
+      if(typeof done==='function')done();
+    }
+    video.addEventListener('ended',finish,{once:true});
+    video.addEventListener('error',finish,{once:true});
+    stage.appendChild(video);
+    timer=setTimeout(finish,2100);
+    try{var playPromise=video.play();if(playPromise&&playPromise.catch)playPromise.catch(function(){finish();});}
+    catch(err){finish();}
+  }
+  // Welza only: black-hole magic video supplied by the user, embedded for single-file use.
+  var WELZA_BLACKHOLE_GIF='assets/asset_084.gif';
+  var WELZA_BLACKHOLE_MAGIC_VIDEO='assets/asset_085.webm';
+  function playWelzaBlackholeMagic(done){
+    try{
+      var magicAudio=welzaBlackholeMagicAudio;
+      magicAudio.pause();magicAudio.currentTime=0;magicAudio.muted=!soundEnabled;magicAudio.volume=1.0;
+      duckBgmForWelza(3600);
+      var restoreMagicBgm=function(){/* shared duck timer restores BGM after the voice and spell finish */};
+      magicAudio.onended=restoreMagicBgm;
+      var magicPlay=magicAudio.play();if(magicPlay&&magicPlay.catch)magicPlay.catch(function(){restoreMagicBgm();});
+      setTimeout(restoreMagicBgm,2500);
+    }catch(err){}
+    var stage=document.getElementById('stage');
+    var video=document.createElement('video');
+    var finished=false,timer=null;
+    video.className='welza-blackhole-magic-fx';
+    video.setAttribute('aria-hidden','true');
+    video.setAttribute('playsinline','');
+    video.setAttribute('webkit-playsinline','');
+    video.muted=true;video.autoplay=true;video.preload='auto';
+    video.src=WELZA_BLACKHOLE_MAGIC_VIDEO;
+    function finish(){
+      if(finished)return;finished=true;
+      if(timer)clearTimeout(timer);
+      video.pause();video.removeAttribute('src');
+      try{video.load();}catch(err){}
+      if(video.parentNode)video.parentNode.removeChild(video);
+      if(typeof done==='function')done();
+    }
+    video.addEventListener('ended',finish,{once:true});
+    video.addEventListener('error',finish,{once:true});
+    stage.appendChild(video);
+    timer=setTimeout(finish,2400);
+    try{var playPromise=video.play();if(playPromise&&playPromise.catch)playPromise.catch(function(){finish();});}
+    catch(err){finish();}
+  }
+  var soraSkillVoice = new Audio('assets/asset_086.mp3');
+  soraSkillVoice.preload='auto';soraSkillVoice.volume=1.0;
+  var soraPlaceVoice = new Audio('assets/asset_087.mp3');
+  soraPlaceVoice.preload='auto';soraPlaceVoice.volume=1.0;
+  function playSoraPlaceSfx(){
+    if(!soundEnabled)return;
+    try{soraPlaceVoice.pause();soraPlaceVoice.currentTime=0;soraPlaceVoice.loop=false;soraPlaceVoice.volume=1.0;var p=soraPlaceVoice.play();if(p&&p.catch)p.catch(function(){});}catch(err){}
+  }
+  var soraTornadoMagicSfx = new Audio('assets/asset_088.mp3');
+  soraTornadoMagicSfx.preload='auto';soraTornadoMagicSfx.volume=1.0;
+  var soraShuffleWindSfx = new Audio('assets/asset_089.mp3');
+  soraShuffleWindSfx.preload='auto';soraShuffleWindSfx.volume=1.0;soraShuffleWindSfx.loop=true;
+  function playSoraTornadoSfx(){if(!soundEnabled)return;try{soraTornadoMagicSfx.pause();soraTornadoMagicSfx.currentTime=0;soraTornadoMagicSfx.volume=1.0;var p=soraTornadoMagicSfx.play();if(p&&p.catch)p.catch(function(){});}catch(err){}}
+  function startSoraShuffleSfx(){if(!soundEnabled)return;try{soraShuffleWindSfx.pause();soraShuffleWindSfx.currentTime=0;soraShuffleWindSfx.loop=true;soraShuffleWindSfx.volume=1.0;var p=soraShuffleWindSfx.play();if(p&&p.catch)p.catch(function(){});}catch(err){}}
+  function stopSoraShuffleSfx(){try{soraShuffleWindSfx.pause();soraShuffleWindSfx.currentTime=0;}catch(err){}}
+  function say(p,onDone){
+    var c=ch(p),e=document.getElementById('cut'),st=document.getElementById('stage');
+    var completed=false;
+    function finishCut(){
+      if(completed)return;
+      completed=true;
+      clearTimeout(cutT);
+      e.className='';
+      // Sora's order is cut-in illustration -> large tornado on the board -> board shuffle.
+      if(c.id==='sora'&&typeof onDone==='function')playSoraTornado(onDone);
+      else if(c.id==='aoi'&&typeof onDone==='function')playAoiMagicCircle(onDone);
+      else if(c.id==='mika'&&typeof onDone==='function')playMikaMagicCircle(onDone);
+      else if(c.id==='luna'&&typeof onDone==='function')playLunaMagic(onDone);
+      else if(c.id==='haru'&&typeof onDone==='function')playHaruSwapMagic(onDone);
+      else if(c.id==='welza'&&typeof onDone==='function')playWelzaBlackholeMagic(onDone);
+      else if(typeof onDone==='function')onDone();
+    }
+    if(c.id==='sora'&&soundEnabled){
+      try{soraSkillVoice.pause();soraSkillVoice.currentTime=0;soraSkillVoice.loop=false;soraSkillVoice.volume=1.0;var soraSkillPlay=soraSkillVoice.play();if(soraSkillPlay&&soraSkillPlay.catch)soraSkillPlay.catch(function(){});}catch(err){}
+    } else if(c.id==='aoi'){
+      try{aoiSkillVoice.pause();aoiSkillVoice.currentTime=0;var aoiVoicePlay=aoiSkillVoice.play();if(aoiVoicePlay&&aoiVoicePlay.catch)aoiVoicePlay.catch(function(){});}catch(err){}
+    } else if(c.id==='mika'){
+      try{mikaSkillVoice.pause();mikaSkillVoice.currentTime=0;var voicePlay=mikaSkillVoice.play();if(voicePlay&&voicePlay.catch)voicePlay.catch(function(){});}catch(err){}
+      try{mikaSkillSfx.pause();mikaSkillSfx.currentTime=0;var mikaSfxPlay=mikaSkillSfx.play();if(mikaSfxPlay&&mikaSfxPlay.catch)mikaSfxPlay.catch(function(){});}catch(err){}
+    } else if(c.id==='luna'){
+      try{lunaSkillVoice.pause();lunaSkillVoice.currentTime=0;var lunaPlay=lunaSkillVoice.play();if(lunaPlay&&lunaPlay.catch)lunaPlay.catch(function(){});}catch(err){}
+      try{lunaSkillSfx.pause();lunaSkillSfx.currentTime=0;var lunaSfxPlay=lunaSkillSfx.play();if(lunaSfxPlay&&lunaSfxPlay.catch)lunaSfxPlay.catch(function(){});}catch(err){}
+    } else if(c.id==='haru'){
+      try{haruSkillVoice.pause();haruSkillVoice.currentTime=0;var haruPlay=haruSkillVoice.play();if(haruPlay&&haruPlay.catch)haruPlay.catch(function(){});}catch(err){}
+      try{haruSkillSfx.pause();haruSkillSfx.currentTime=0;var haruSfxPlay=haruSkillSfx.play();if(haruSfxPlay&&haruSfxPlay.catch)haruSfxPlay.catch(function(){});}catch(err){}
+    } else if(c.id==='welza'&&soundEnabled){
+      // The voice is intentionally independent of the cut-in overlay; it keeps playing after the image fades.
+      duckBgmForWelza(3600);
+      try{welzaSkillVoice.pause();welzaSkillVoice.currentTime=0;welzaSkillVoice.loop=false;welzaSkillVoice.volume=1.0;var welzaSkillPlay=welzaSkillVoice.play();if(welzaSkillPlay&&welzaSkillPlay.catch)welzaSkillPlay.catch(function(){});}catch(err){}
+    }
+    noteEl.textContent=c.name+':「'+c.line+'」';
+    if(!fxOn()){if(typeof onDone==='function')onDone();return;}
+    e.style.setProperty('--gl',GL[c.id]);e.querySelector('img').src=IMG.cut[c.id];e.querySelector('.nm').textContent=c.icon+c.sname+'!';
+    e.className='';void e.offsetWidth;e.className='on'+(p==='X'?' r':'');
+    st.classList.remove('shake');void st.offsetWidth;st.classList.add('shake');
+    clearTimeout(cutT);cutT=setTimeout(finishCut,1000);
+    e.onclick=finishCut;
+  }
+  var N,K,windows,board,turn,over,pending,skills,winLine,busy,cells=[];
+  var freezeLockIndex=-1,freezeLockVictim=null,freezeBreakingIndex=-1,freezeDestroyIndex=-1;
+  var blackholeIndex=-1,blackholeOwner=null,blackholeChildIndices=[],blackholeFading=false;
+  var mikaEraseFirstIndex=-1,mikaEraseSecondIndex=-1;
+  var score={O:0,D:0,X:0};
+  var boardEl=document.getElementById('board'),statusEl=document.getElementById('status'),
+      noteEl=document.getElementById('note'),pickEl=document.getElementById('pick'),skillsEl=document.getElementById('skills');
+  var skinEl=document.getElementById('skinChoices');
+  var skinLabels={simple:'シンプル',heart:'ハート',moon:'ムーン',gear:'ギア',flower:'フラワー',crown:'クラウン',sakura:'さくら'};
+  function applySkin(){
+    var simple=cfg.skin==='simple';
+    boardEl.classList.toggle('simple-board',simple);
+    if(simple){
+      boardEl.style.backgroundImage='none';
+      boardEl.style.backgroundColor='var(--line)';
+      boardEl.style.padding='8px';
+      boardEl.style.gap='8px';
+      boardEl.style.borderRadius='20px';
+    }else{
+      boardEl.style.backgroundImage='url("'+IMG.tiles[cfg.skin]+'")';
+      boardEl.style.backgroundColor='transparent';
+      boardEl.style.padding='15% 10% 13%';
+      boardEl.style.gap=N===5?'3px':'5px';
+      boardEl.style.borderRadius='0';
+    }
+    cells.forEach(function(cell){
+      cell.classList.add('skin-on');
+      cell.style.backgroundImage='none';
+      cell.style.backgroundColor=simple?'var(--card)':'rgba(255,255,255,.16)';
+      cell.style.borderRadius=simple?'12px':'5px';
+    });
+    Array.prototype.forEach.call(skinEl.querySelectorAll('.skin-option'),function(btn){
+      btn.setAttribute('aria-pressed',btn.getAttribute('data-skin')===cfg.skin?'true':'false');
+    });
+  }
+  function buildSkinPicker(){
+    skinEl.innerHTML=Object.keys(skinLabels).map(function(id){
+      var preview=id==='simple'?'<span class="simple-preview"><i></i><i></i><i></i><i></i></span>':'<img alt="" src="'+IMG.tiles[id]+'">';
+      return '<button type="button" class="skin-option" data-skin="'+id+'" aria-pressed="'+(id===cfg.skin?'true':'false')+'">'+preview+'<b>'+skinLabels[id]+'</b></button>';
+    }).join('');
+  }
+  buildSkinPicker();
+  skinEl.addEventListener('click',function(ev){
+    var btn=ev.target.closest('.skin-option');
+    if(!btn)return;
+    cfg.skin=btn.getAttribute('data-skin');
+    applySkin();
+  });
+
+
+  function opp(p){return p==='O'?'X':'O';}
+  function isCpu(p){return cfg.mode==='watch'||!local(p);}
+  function empties(b){var r=[];for(var i=0;i<b.length;i++)if(!b[i]&&i!==freezeLockIndex&&i!==blackholeIndex)r.push(i);return r;}
+  function wins(b,p){return windows.some(function(l){return l.every(function(i){return b[i]===p;});});}
+  function findWin(b,pref){
+    // Prefer the player who just moved when simultaneous lines exist (e.g. Aoi's
+    // skill placement must be judged before the opponent is handed the turn).
+    for(var k=0;k<windows.length;k++){
+      var l=windows[k];
+      if(b[l[0]]===pref&&l.every(function(i){return b[i]===pref;}))return{p:pref,line:l};
+    }
+    for(var j=0;j<windows.length;j++){
+      var line=windows[j],f=b[line[0]];
+      if(f&&line.every(function(i){return b[i]===f;}))return{p:f,line:line};
+    }
+    return null;
+  }
+  function names(){return cfg.mode==='two'?{O:'○',X:'×'}:cfg.mode==='watch'?{O:'CPU(○)',X:'CPU(×)'}:cfg.mode==='net'?{O:myRole==='O'?'あなた(○)':'相手(○)',X:myRole==='X'?'あなた(×)':'相手(×)'}:{O:humanMark==='O'?'あなた(○)':'CPU(○)',X:humanMark==='X'?'あなた(×)':'CPU(×)'};}
+
+  function setup(){
+    N=cfg.size;K=N===3?3:4;windows=[];
+    [[0,1],[1,0],[1,1],[1,-1]].forEach(function(d){
+      for(var r=0;r<N;r++)for(var c=0;c<N;c++){
+        var er=r+(K-1)*d[0],ec=c+(K-1)*d[1];
+        if(er<0||er>=N||ec<0||ec>=N)continue;
+        var l=[];for(var t=0;t<K;t++)l.push((r+t*d[0])*N+c+t*d[1]);
+        windows.push(l);
+      }
+    });
+    boardEl.innerHTML='';cells=[];
+    boardEl.style.gridTemplateColumns='repeat('+N+',1fr)';
+    boardEl.style.gridTemplateRows='repeat('+N+',1fr)';
+    boardEl.className=N===5?'n5':'';
+    for(var i=0;i<N*N;i++){(function(i){
+      var b=document.createElement('button');b.type='button';b.className='cell';
+      b.setAttribute('aria-label','マス'+(i+1));
+      b.addEventListener('click',function(){handle(i);});
+      boardEl.appendChild(b);cells.push(b);
+    })(i);}
+    applySkin();
+    document.getElementById('rule').textContent=
+      (K===3?'3つ':'4つ')+'たてよこななめにそろえたら勝ち。'+(cfg.skills?'キャラごとに必殺技が1つ、'+(cfg.skills===Infinity?'何度でも':cfg.skills+'回まで')+'使えます。'+(cfg.kill?'必殺技で直接そろえて勝つこともできます。':'必殺技で直接そろえて勝つことはできません。')+'先手は毎回交代します。':'');
+    reset();
+  }
+  function skillLimit(){return cfg.skills===Infinity?Infinity:Math.max(0,Number(cfg.skills)||0);}
+  function consumeSkill(p){if(skills[p]!==Infinity&&skills[p]>0)skills[p]--;}
+  function skillSettingCode(){return cfg.skills===Infinity?3:(Number(cfg.skills)||0);}
+  function skillSettingFromCode(v){return v===3?Infinity:(v===2?2:(v===1?1:0));}
+  function reset(){
+    mikaEraseFirstIndex=-1;mikaEraseSecondIndex=-1;
+    returnToNormalBgm();
+    hideVictory();
+    board=[];for(var i=0;i<N*N;i++)board.push(null);
+    turn=first;over=false;pending=null;winLine=null;busy=false;freezeLockIndex=-1;freezeLockVictim=null;freezeBreakingIndex=-1;freezeDestroyIndex=-1;blackholeIndex=-1;blackholeOwner=null;blackholeChildIndices=[];blackholeFading=false;
+    gameStarted=!(cfg.mode==='strong'||cfg.mode==='weak'||cfg.mode==='two'||cfg.mode==='watch');
+    noteEl.textContent=(first==='O'?'○':'×')+'が先手です';
+    if(cfg.mode==='strong'||cfg.mode==='weak'){chars[humanMark]=humanChar;chars[opp(humanMark)]=cfg.cpuChar;}
+    skills={O:skillLimit(),X:skillLimit()};
+    // Give each CPU a slightly different point in the match when its skill becomes available.
+    cpuSkillUnlockAt={
+      O:(K===3?3:5)+Math.floor(Math.random()*(K===3?2:3)),
+      X:(K===3?3:5)+Math.floor(Math.random()*(K===3?2:3))
+    };
+    var startBtn=document.getElementById('startMatch');
+    startBtn.hidden=gameStarted;
+    render();setStatus();
+  }
+  function hasOpp(p){return board.some(function(v){return v===opp(p);});}
+  function flipWins(i,p){if(cfg.kill)return false;var nb=board.slice();nb[i]=p;return wins(nb,p);}
+  function swapWins(i,j,p){if(cfg.kill)return false;var nb=board.slice();nb[i]=opp(p);nb[j]=p;return wins(nb,p);}
+  function swapPartner(i,p){return board.some(function(v,j){return v===opp(p)&&!swapWins(i,j,p);});}
+  function canSkill(p,k){
+    if(k==='none')return false;
+    if(k==='freeze')return empties(board).length>1;
+    if(k==='erase')return hasOpp(p);
+    if(k==='flip')return board.some(function(v,i){return v===opp(p)&&!flipWins(i,p);});
+    if(k==='shuffle')return empties(board).length>0;
+    if(k==='blackhole')return blackholeIndex<0&&board.length>0;
+    return empties(board).length>0&&hasOpp(p);
+  }
+  function cellOk(i){
+    if(over||busy||((cfg.mode==='strong'||cfg.mode==='weak')&&!gameStarted)||(!remote&&isCpu(turn))||(cfg.mode==='net'&&!netOn))return false;
+    if(i===blackholeIndex)return false;
+    if(pending==='blackhole')return true;
+    if(i===freezeLockIndex)return false;
+    if(pending==='erase')return board[i]===opp(turn);
+    if(pending==='erase2')return board[i]===opp(turn)&&i!==mikaEraseFirstIndex;
+    if(pending==='flip')return board[i]===opp(turn)&&!flipWins(i,turn);
+    if(pending==='swapPlace')return !board[i];
+    if(pending==='swapOwn2')return board[i]===turn&&swapPartner(i,turn);
+    if(pending==='swap2')return board[i]===opp(turn)&&!swapWins(warpFrom,i,turn);
+    return !board[i];
+  }
+  // Welza black-hole sound effects synthesized with Web Audio (no external files).
+  var welzaAudioCtx=null;
+  function welzaUnlockAudio(){
+    try{
+      var AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
+      if(!welzaAudioCtx)welzaAudioCtx=new AC();
+      if(welzaAudioCtx.state==='suspended')welzaAudioCtx.resume();
+      // Do not briefly play the black-hole magic track here: this handler also
+      // runs on character-selection taps and caused an unintended sound there.
+    }catch(e){}
+  }
+  // Mobile browsers require audio to be unlocked during a real user gesture.
+  document.addEventListener('pointerdown',welzaUnlockAudio,true);
+  document.addEventListener('touchstart',welzaUnlockAudio,{capture:true,passive:true});
+  document.addEventListener('click',welzaUnlockAudio,true);
+  function welzaTone(freq,endFreq,duration,gain,type,delay){
+    if(!soundEnabled)return;
+    try{
+      var AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
+      if(!welzaAudioCtx)welzaAudioCtx=new AC();
+      if(welzaAudioCtx.state==='suspended')welzaAudioCtx.resume();
+      var t=welzaAudioCtx.currentTime+(delay||0),o=welzaAudioCtx.createOscillator(),g=welzaAudioCtx.createGain();
+      o.type=type||'sine';o.frequency.setValueAtTime(freq,t);o.frequency.exponentialRampToValueAtTime(Math.max(20,endFreq),t+duration);
+      g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(gain,t+.012);g.gain.setValueAtTime(gain,t+Math.max(.03,duration*.55));g.gain.exponentialRampToValueAtTime(.0001,t+duration);
+      o.connect(g);g.connect(welzaAudioCtx.destination);o.start(t);o.stop(t+duration+.04);
+    }catch(e){}
+  }
+  function welzaBlackholeSfx(kind){
+    if(!soundEnabled)return;
+    duckBgmForWelza(kind==='magic'?3000:1200);
+    // Effects are deliberately prominent so they remain audible over the battle BGM.
+    if(kind==='place'){
+      welzaTone(105,28,.82,.78,'sawtooth');welzaTone(440,72,.62,.46,'sine',.015);welzaTone(880,210,.24,.20,'triangle',.08);
+    }else if(kind==='absorb'){
+      welzaTone(360,38,.62,.72,'triangle');welzaTone(210,42,.54,.48,'sawtooth',.035);welzaTone(760,190,.30,.24,'sine',.08);
+    }else if(kind==='vanish'){
+      welzaTone(1120,135,.72,.62,'sine');welzaTone(720,240,.55,.42,'triangle',.04);welzaTone(150,38,.38,.34,'sawtooth',.10);
+    }else if(kind==='magic'){
+      // A rising charge followed by a deep portal-opening impact, synced to the magic video.
+      welzaTone(95,720,1.05,.52,'sawtooth');welzaTone(260,980,.82,.38,'triangle',.12);
+      welzaTone(880,110,.72,.72,'sine',.78);welzaTone(68,24,1.05,.82,'sawtooth',.82);
+      welzaTone(1450,420,.42,.30,'triangle',1.02);
+    }else if(kind==='mark'){
+      // Short, crisp two-part placement click.
+      welzaTone(680,430,.105,.42,'triangle');welzaTone(1180,760,.075,.24,'sine',.025);
+    }
+  }
+  function fadeOutBlackhole(){
+    if(blackholeIndex<0||blackholeFading)return;
+    blackholeFading=true;welzaBlackholeSfx('vanish');
+    var idx=blackholeIndex;
+    if(cells[idx]){var img=cells[idx].querySelector('.blackhole-mark');if(img)img.classList.add('blackhole-fade-out');}
+    setTimeout(function(){
+      if(blackholeIndex===idx){blackholeIndex=-1;blackholeOwner=null;blackholeFading=false;render();}
+    },540);
+  }
+  function render(){var newCells=[];
+    for(var i=0;i<cells.length;i++){
+      var c=cells[i],ok=cellOk(i);
+      var nw=board[i]&&prevB[i]!==board[i];if(nw)newCells.push(i);
+      var mk=(board[i]?board[i]+chars[board[i]]:'')+(i===freezeLockIndex?'|LOCK':'')+(i===blackholeIndex?'|BLACKHOLE':'')+(blackholeChildIndices.indexOf(i)>=0?'|BHCHILD':'');
+      if(c.dataset.m!==mk){
+        c.dataset.m=mk;
+        var markClass=board[i]?(chars[board[i]]==='aoi'?' class="aoi-crystal-mark"':(chars[board[i]]==='sora'?' class="sora-mark"':(chars[board[i]]==='welza'?' class="welza-mark"':''))):'';
+        c.innerHTML=(i===blackholeIndex?'<img class="blackhole-mark'+(blackholeFading?' blackhole-fade-out':'')+'" alt="ブラックホール" src="'+WELZA_BLACKHOLE_GIF+'">':(board[i]?'<img'+markClass+' alt="'+(board[i]==='O'?'○':'×')+'" src="'+IMG.m[board[i]][chars[board[i]]]+'">':''))+
+          (i===freezeLockIndex?'<img class="freeze-lock-overlay" alt="氷のロック" src="'+IMG.lockAoi+'">':'')+
+          (blackholeChildIndices.indexOf(i)>=0?'<img class="blackhole-child-mark" alt="子ブラックホール" src="'+WELZA_BLACKHOLE_GIF+'">':'');
+      }
+      if(nw)popUntil[i]=Date.now()+(chars[board[i]]==='welza'?760:520);
+      var popActive=!!board[i]&&popUntil[i]>Date.now();
+      c.className='cell skin-on'+(board[i]==='O'?' o':board[i]==='X'?' x':'')+
+        (winLine&&winShow&&winLine.indexOf(i)>=0?' win':'')+(popActive?(fxOn()?' pop-'+chars[board[i]].charAt(0):' pop'):'')+(fxk[i]?' fx-'+fxk[i]:'')+
+        (ok&&pending?' target':'')+(i===freezeBreakingIndex?' freeze-breaking':'')+(i===freezeDestroyIndex?' freeze-breaking':'');
+      c.disabled=!ok;
+    }
+    newCells.forEach(function(i){
+      (function(idx){
+        setTimeout(function(){
+          delete popUntil[idx];
+          cells[idx].classList.remove('pop','pop-m','pop-l','pop-h','pop-a','pop-w');
+        },780);
+      })(i);
+      if(chars[board[i]]==='aoi')playAoiPlaceSfx();
+      if(fxOn()){var p=cpos(i);burst(chars[board[i]],p.x,p.y,fxk[i]?.6:1);if(!fxk[i]&&chars[board[i]]==='haru'&&!wins(board,board[i])){var st=document.getElementById('stage');st.classList.remove('shake');void st.offsetWidth;st.classList.add('shake');}}
+    });
+    prevB=board.slice();if(Object.keys(fxk).length)setTimeout(function(){fxk={};},800);
+    var h='';
+    if(cfg.skills){['O','X'].forEach(function(p){
+      var c=ch(p),used=skills[p]!==Infinity&&skills[p]<=0;
+      var dis=used||c.skill==='none'||over||busy||turn!==p||isCpu(p)||(cfg.mode==='net'&&!netOn)||pending==='swapOwn2'||pending==='swap2'||pending==='erase2'||
+        !canSkill(p,c.skill);
+      h+='<div class="skrow">'+av(c)+'<span class="who">'+names()[p]+'<br>'+c.name+'</span><div class="sk">'+
+         '<button type="button" data-p="'+p+'" data-k="'+c.skill+'"'+(dis?' disabled':'')+
+         ' class="'+(used?'used ':'')+(pending===c.skill&&turn===p?'on ':'')+'skill-art" aria-label="'+c.name+'の必殺技 '+c.sname+'"><img alt="'+c.sname+'" src="'+IMG.skillButton[c.id]+'"><span class="sr-only">'+c.icon+c.sname+'</span></button></div></div>';
+    });}
+    var pk='';
+    ['O','X'].forEach(function(p){
+      var fixed=(cfg.mode==='net'&&netOn);
+      pk+='<div class="pickrow"><span>'+names()[p]+'のキャラ'+(isCpu(p)?(cfg.mode==='net'?'':'(選択済み)'):'')+'</span><div class="cards">';
+      IDS.forEach(function(id){var c=CH[id];
+        pk+='<button type="button" class="card" data-p="'+p+'" data-c="'+id+'"'+(fixed?' disabled':'')+
+          ' aria-pressed="'+(chars[p]===id)+'">'+'<img class="sp'+(id==='welza'?' welza-pixel-art':'')+'" alt="'+c.name+'" src="'+IMG.sp[id]+'">'+(cfg.skills?c.icon+c.desc:'')+'</button>';
+      });
+      pk+='</div></div>';
+    });
+    pickEl.innerHTML=pk;
+    skillsEl.innerHTML=h;
+    var n=names();
+    document.getElementById('score').innerHTML=
+      '<div>'+n.O+'<br><b>'+score.O+'</b></div><div>ひきわけ<br><b>'+score.D+'</b></div><div>'+n.X+'<br><b>'+score.X+'</b></div>';
+    renderExtraSettings();
+  }
+  function renderExtraSettings(){
+    var firstBox=document.getElementById('firstControls');
+    firstBox.hidden=false;
+    var fo=document.getElementById('firstO'),fx=document.getElementById('firstX');
+    if(cfg.mode==='two'||cfg.mode==='net'){fo.textContent='○が先攻';fx.textContent='×が先攻';fo.setAttribute('aria-pressed',firstChoice==='O');fx.setAttribute('aria-pressed',firstChoice==='X');}
+    else{fo.textContent='自分が先攻';fx.textContent='自分が後攻';fo.setAttribute('aria-pressed',humanMark==='O');fx.setAttribute('aria-pressed',humanMark==='X');}
+    var lockNetChoice=cfg.mode==='net'&&!!room&&(myRole==='X'||netOn);fo.disabled=lockNetChoice;fx.disabled=lockNetChoice;
+  }
+  function setStatus(){
+    if(over)return;
+    var t={erase:'消したい相手の印を選択(1つ目)',erase2:'2つ目の相手の印を選択（まだ壊れないよ）',flip:'自分のものにする相手の印をタップ',
+           swapPlace:'先に自分の印を置くマスを選んでね',swapOwn2:'チェンジする自分の印を選んでね',swap2:'場所チェンジする相手の印を選んでね',freeze:'置くマスを選んでね（配置後に相手の最善手を凍結）',blackhole:'ブラックホールを設置するマスをタップ！'}[pending];
+    if(!t)t=(cfg.mode==='strong'||cfg.mode==='weak')&&!gameStarted?'準備ができたら「試合開始！」を押してね':cfg.mode==='two'?(turn==='O'?'○':'×')+'の番です':(local(turn)?'あなたの番です':cfg.mode==='net'?'相手の番です…':'CPUが考え中…');
+    statusEl.textContent=t;
+  }
+  skillsEl.addEventListener('click',function(e){
+    var b=e.target.closest('button');if(!b||b.disabled)return;
+    var k=b.getAttribute('data-k');
+    if(cfg.mode==='net'){lg+={erase:'E',flip:'F',swap:'S',freeze:'Z',shuffle:'H',blackhole:'W'}[k];pub();}
+    useSkill(k);
+  });
+  function useSkill(k){if(pending==='erase'||pending==='erase2'){mikaEraseFirstIndex=-1;mikaEraseSecondIndex=-1;}pending=pending===k?null:(k==='swap'?'swapPlace':k);render();setStatus();}
+
+  pickEl.addEventListener('click',function(e){
+    var b=e.target.closest('button');if(!b||b.disabled)return;
+    var p=b.getAttribute('data-p'),c=b.getAttribute('data-c');
+    if(cfg.mode==='net'){if(p!==myRole||netOn)return;myCh=c;chars[p]=c;render();pub();return;}
+    if(chars[p]===c)return;
+    // Allow both sides to select the same character.
+    chars[p]=c;
+    if((cfg.mode==='strong'||cfg.mode==='weak')){
+      if(p===humanMark)humanChar=c;
+      else cfg.cpuChar=c;
+    }
+    score={O:0,D:0,X:0};if(cfg.mode==='strong'||cfg.mode==='weak')first='O';reset();
+  });
+  function checkEnd(){
+    var w=findWin(board,turn);
+    if(w){over=true;winLine=w.line;winShow=!fxOn();if(fxOn()){trace(w);clearTimeout(victoryT);victoryT=setTimeout(function(){showVictory(w.p);},900);}else{showVictory(w.p);}score[w.p]++;
+      statusEl.textContent=cfg.mode==='two'?(w.p==='O'?'○の勝ち!':'×の勝ち!'):(w.p===(cfg.mode==='net'?myRole:humanMark)?'あなたの勝ち!':cfg.mode==='net'?'相手の勝ち…':'CPUの勝ち…');
+    }else if(!empties(board).length){over=true;score.D++;statusEl.textContent='ひきわけ';showDraw();}
+    render();if(cfg.mode==='net'&&!remote)pub();return over;
+  }
+  // Rank the opponent's legal replies after Aoi has placed her own mark.
+  // Immediate wins are preferred, then immediate blocks, then the strongest open line.
+  function bestMoveFor(p){
+    var e=empties(board),q=opp(p),i,j,best=-1,bestScore=-Infinity;
+    if(!e.length)return -1;
+    // On the classic 3x3 board, use a complete minimax search for a truly optimal reply.
+    // Always prioritize a square where the opponent can win immediately.
+    // This must run before minimax so a tactical win is never overlooked.
+    for(i=0;i<e.length;i++){
+      var immediate=board.slice();immediate[e[i]]=p;
+      if(wins(immediate,p))return e[i];
+    }
+    // On 3x3, evaluate each candidate as a move by p (the player to be blocked),
+    // then let q respond. The previous version accidentally placed q first,
+    // which could select an unrelated square instead of p's winning square.
+    if(N===3&&K===3){
+      function minimax(b,next,depth){
+        if(wins(b,p))return 10-depth;
+        if(wins(b,q))return depth-10;
+        var open=[];for(var m=0;m<b.length;m++)if(!b[m]&&m!==freezeLockIndex)open.push(m);
+        if(!open.length)return 0;
+        var bestVal=next===p?-Infinity:Infinity;
+        for(var n=0;n<open.length;n++){
+          var at=open[n];b[at]=next;
+          var val=minimax(b,opp(next),depth+1);b[at]=null;
+          if(next===p)bestVal=Math.max(bestVal,val);else bestVal=Math.min(bestVal,val);
+        }
+        return bestVal;
+      }
+      var exact=-1,exactScore=-Infinity;
+      for(i=0;i<e.length;i++){
+        var trial=board.slice();trial[e[i]]=p;
+        var replyScore=minimax(trial,q,1);
+        if(replyScore>exactScore){exactScore=replyScore;exact=e[i];}
+      }
+      return exact;
+    }
+    for(i=0;i<e.length;i++){
+      var block=board.slice();block[e[i]]=q;
+      if(wins(block,q))return e[i];
+    }
+    for(i=0;i<e.length;i++){
+      var idx=e[i],score=0;
+      for(j=0;j<windows.length;j++){
+        var line=windows[j];if(line.indexOf(idx)<0)continue;
+        var own=0,enemy=0;
+        for(var z=0;z<line.length;z++){
+          var v=board[line[z]];
+          if(v===p)own++;else if(v===q)enemy++;
+        }
+        if(enemy===0)score+=Math.pow(7,own);
+      }
+      var row=Math.floor(idx/N),col=idx%N,mid=(N-1)/2;
+      score+=(N-Math.abs(row-mid)-Math.abs(col-mid))*0.15;
+      if(score>bestScore){bestScore=score;best=idx;}
+    }
+    return best;
+  }
+  function clearFreezeLock(){
+    if(freezeLockIndex>=0){
+      var old=freezeLockIndex;freezeLockIndex=-1;freezeLockVictim=null;
+      if(cells[old])cells[old].dataset.m='';
+    }
+  }
+  function bestEnemyPieceToDestroy(p){
+    var enemy=opp(p),best=-1,bestScore=-Infinity;
+    for(var i=0;i<board.length;i++){
+      if(board[i]!==enemy)continue;
+      var test=board.slice();test[i]=null;
+      var score=0,enemyWins=0,enemyForks=0,ownThreats=0;
+      // Reward removing a mark that participates in immediate or developing threats.
+      for(var w=0;w<windows.length;w++){
+        var line=windows[w],enemyCount=0,ownCount=0,contains=false;
+        for(var j=0;j<line.length;j++){
+          if(line[j]===i)contains=true;
+          if(test[line[j]]===enemy)enemyCount++;
+          if(test[line[j]]===p)ownCount++;
+        }
+        if(contains&&ownCount===0&&enemyCount>0){
+          score+=enemyCount===K-1?1200:enemyCount===K-2?260:enemyCount*45;
+        }
+      }
+      // Count the opponent's winning replies before and after removal; removing a
+      // fork-producing piece is especially valuable.
+      for(var e=0;e<test.length;e++)if(!test[e]){
+        test[e]=enemy;if(wins(test,enemy))enemyWins++;test[e]=null;
+      }
+      if(enemyWins>0)score+=enemyWins*500;
+      if(enemyWins>=2)score+=900;
+      // Prefer a mark whose removal opens more useful lines for our own attack.
+      for(var w2=0;w2<windows.length;w2++){
+        var line2=windows[w2],pc=0,ec=0;
+        for(var k=0;k<line2.length;k++){if(test[line2[k]]===p)pc++;if(test[line2[k]]===enemy)ec++;}
+        if(ec===0&&pc>0)ownThreats+=pc*pc;
+      }
+      score+=ownThreats*18;
+      // Stable tie-break: central / multi-line squares naturally score higher.
+      if(score>bestScore){bestScore=score;best=i;}
+    }
+    return best;
+  }
+  function activateAoiFreeze(p,beforeLock){
+    if(checkEnd())return;
+    if(freezeLockVictim===p)clearFreezeLock();
+    busy=true;pending=null;
+    noteEl.textContent='❄️ アオイ「フリーズロック」発動！';
+    render();setStatus();
+    // Cut-in -> lock the opponent's best square on the current board -> destroy
+    // a dangerous opposing mark -> hand the turn to the opponent.
+    say(p,function(){
+      // CPU matches reveal the cut-in first, then place the mark before resolving the freeze.
+      if(typeof beforeLock==='function')beforeLock();
+      // Aoi's placed mark may already complete a line. End the match immediately;
+      // do not resolve the freeze or pass the turn first.
+      if(checkEnd())return;
+      // Determine and apply the lock BEFORE removing an opposing mark.
+      // This prevents the newly emptied destruction square from being locked too.
+      var target=bestMoveFor(opp(p));
+      if(target>=0){
+        freezeLockIndex=target;
+        freezeLockVictim=opp(p);
+        fxk[target]='lock';
+        try{
+          aoiFreezeLockSfx.pause();aoiFreezeLockSfx.currentTime=0;
+          var lockSfxPlay=aoiFreezeLockSfx.play();
+          if(lockSfxPlay&&lockSfxPlay.catch)lockSfxPlay.catch(function(){});
+        }catch(err){}
+        noteEl.textContent='❄️ 相手の最善手をフリーズロック！';
+        render();
+      }
+
+      // After the lock is visibly established, destroy one dangerous opposing mark.
+      setTimeout(function(){
+        var destroyed=bestEnemyPieceToDestroy(p);
+        if(destroyed>=0){
+          freezeDestroyIndex=destroyed;
+          try{
+            aoiFreezeDestroySfx.pause();aoiFreezeDestroySfx.currentTime=0;
+            var destroySfxPlay=aoiFreezeDestroySfx.play();
+            if(destroySfxPlay&&destroySfxPlay.catch)destroySfxPlay.catch(function(){});
+          }catch(err){}
+          board[destroyed]=null;
+          fxk[destroyed]='erase';
+          noteEl.textContent='❄️ 相手の重要なコマを破壊！';
+          render();
+        }
+
+        setTimeout(function(){
+          freezeDestroyIndex=-1;
+          // If the lock is the only remaining empty square, there is no legal
+          // opponent move. Otherwise let the opponent play around the locked square.
+          var available=empties(board).filter(function(i){return i!==freezeLockIndex;});
+          if(target>=0&&available.length===0){
+            busy=true;freezeBreakingIndex=freezeLockIndex;render();
+            setTimeout(function(){
+              clearFreezeLock();freezeBreakingIndex=-1;render();
+              busy=false;turn=p;
+              noteEl.textContent='❄️ 相手の手を封じた！もう一度あなたの番です';
+              render();setStatus();
+              if(isCpu(turn)&&cfg.mode!=='net')cpuTurn();
+            },760);
+            return;
+          }
+          busy=false;turn=opp(p);if(blackholeIndex>=0&&turn===blackholeOwner)fadeOutBlackhole();render();setStatus();
+          if(isCpu(turn)&&cfg.mode!=='net')cpuTurn();
+        },620);
+      },650);
+    });
+  }
+  function clearFreezeLock(){
+    if(freezeLockIndex>=0){
+      var old=freezeLockIndex;
+      freezeLockIndex=-1;
+      freezeLockVictim=null;
+      // Remove the visible overlay immediately, not only the logical lock state.
+      // Use a sentinel so render() is guaranteed to rebuild an empty cell too.
+      if(cells[old]){
+        var overlay=cells[old].querySelector('.freeze-lock-overlay');
+        if(overlay)overlay.remove();
+        cells[old].dataset.m='__FREEZE_UNLOCKED__';
+        cells[old].classList.remove('freeze-breaking');
+      }
+      if(fxk&&fxk[old]==='lock')delete fxk[old];
+    }
+  }
+  function finishTurnAfterLock(moved,nextTurn){
+    if(freezeLockVictim!==moved){
+      if(checkEnd())return;
+      turn=nextTurn;pending=null;busy=false;if(blackholeIndex>=0&&turn===blackholeOwner)fadeOutBlackhole();render();setStatus();
+      if(isCpu(turn)&&cfg.mode!=='net')cpuTurn();
+      return;
+    }
+    // The victim's turn has ended: remove the logical and visible lock now,
+    // then play the shatter effect on the freed square before handing over.
+    var expiredLock=freezeLockIndex;
+    busy=true;
+    clearFreezeLock();
+    freezeBreakingIndex=expiredLock;
+    render();setStatus();
+    setTimeout(function(){
+      freezeBreakingIndex=-1;
+      render();
+      busy=false;
+      if(checkEnd())return;
+      turn=nextTurn;pending=null;if(blackholeIndex>=0&&turn===blackholeOwner)fadeOutBlackhole();render();setStatus();
+      if(isCpu(turn)&&cfg.mode!=='net')cpuTurn();
+    },420);
+  }
+  function after(){
+    var moved=turn;
+    finishTurnAfterLock(moved,opp(moved));
+  }
+  function performSoraShuffle(p,done){
+    // True permutation: every O, X and empty square is included exactly once.
+    busy=true;pending=null;
+    clearFreezeLock();
+    noteEl.textContent='🍃 ソラ「ウィンドシャッフル」！';
+    var stage=document.getElementById('stage');
+
+    // Remove any remnants from a previous shuffle/placement animation first.
+    cells.forEach(function(cell){
+      cell.classList.remove('sora-shuffling','pop','pop-m','pop-l','pop-h','pop-a','pop-s','fx-flip','fx-swap');
+      cell.style.removeProperty('--wind-x');
+      cell.style.removeProperty('--wind-y');
+      cell.style.removeProperty('animation-delay');
+    });
+    fxk={};
+    popUntil={};
+    stage.classList.remove('sora-wind');
+    render();
+    void stage.offsetWidth;
+    stage.classList.add('sora-wind');
+    startSoraShuffleSfx();
+
+    var side=Math.round(Math.sqrt(cells.length))||3;
+    var center=(side-1)/2;
+    // Exact square spiral: center first, then each ring clockwise along
+    // its four straight edges.  Every ring finishes at its top-left corner.
+    // This avoids the diagonal corner-skips produced by polar-angle sorting.
+    var order=[];
+    function addRingCell(x,y,ring){
+      var index=(y+center)*side+(x+center);
+      order.push({cell:cells[index],index:index,ring:ring,x:x,y:y});
+    }
+    addRingCell(0,0,0);
+    for(var ring=1;ring<=center;ring++){
+      // Top edge: just right of the top-left corner through top-right.
+      for(var tx=-ring+1;tx<=ring;tx++)addRingCell(tx,-ring,ring);
+      // Right edge: continue downward, including bottom-right.
+      for(var ry=-ring+1;ry<=ring;ry++)addRingCell(ring,ry,ring);
+      // Bottom edge: continue leftward, including bottom-left.
+      for(var bx=ring-1;bx>=-ring;bx--)addRingCell(bx,ring,ring);
+      // Left edge: travel upward, stopping just below top-left.
+      for(var ly=ring-1;ly>=-ring+1;ly--)addRingCell(-ring,ly,ring);
+      // Close the square with the top-left corner as the final cell.
+      addRingCell(-ring,-ring,ring);
+    }
+
+    // A gentle clockwise tangent drift gives the sequential one-turn spin a whirlpool feel.
+    var stagger=.105;
+    order.forEach(function(item,rank){
+      var radius=Math.sqrt(item.x*item.x+item.y*item.y);
+      var nx=radius?item.x/radius:0;
+      var ny=radius?item.y/radius:0;
+      var drift=item.ring===0?0:Math.min(18,9+item.ring*4.5);
+      item.cell.style.setProperty('--wind-x',(-ny*drift).toFixed(1)+'px');
+      item.cell.style.setProperty('--wind-y',(nx*drift).toFixed(1)+'px');
+      item.cell.style.animationDelay=(rank*stagger).toFixed(3)+'s';
+      item.cell.classList.add('sora-shuffling');
+    });
+    setStatus();
+
+    // Hold the board until the last square's single 360-degree turn has landed.
+    var lastStart=(order.length-1)*stagger*1000;
+    setTimeout(function(){
+      stopSoraShuffleSfx();
+      var shuffled=board.slice();
+      for(var i=shuffled.length-1;i>0;i--){
+        var j=Math.floor(Math.random()*(i+1));
+        var tmp=shuffled[i];shuffled[i]=shuffled[j];shuffled[j]=tmp;
+      }
+      board=shuffled;
+      fxk={};
+      cells.forEach(function(cell){
+        cell.classList.remove('sora-shuffling');
+        cell.style.removeProperty('--wind-x');
+        cell.style.removeProperty('--wind-y');
+        cell.style.removeProperty('animation-delay');
+      });
+      stage.classList.remove('sora-wind');
+      render();
+      setTimeout(function(){
+        busy=false;
+        if(checkEnd())return;
+        if(typeof done==='function')done();
+      },260);
+    },lastStart+900);
+  }
+
+  function handle(i){
+    if(!cellOk(i))return;
+    startBattleBgm();
+    if(cfg.mode==='net'&&!remote){lg+=i.toString(36);pub();}
+    var p=turn;noteEl.textContent='';
+    if(pending==='blackhole'){
+      consumeSkill(p);pending=null;busy=true;
+      noteEl.textContent='🌀 ヴェルザ「ブラックホール」設置！';
+      render();setStatus();
+      say(p,function(){
+        // The selected square becomes the persistent parent hole, replacing any mark or Aoi lock.
+        if(freezeLockIndex===i)clearFreezeLock();
+        board[i]=null;blackholeIndex=i;blackholeOwner=p;blackholeChildIndices=[];blackholeFading=false;welzaBlackholeSfx('place');
+        // Candidate targets are empty cells, opponent marks, and Aoi's ice-lock square.
+        // Welza's own marks are deliberately excluded so the skill never reduces her piece count.
+        var r=Math.floor(i/N),c=i%N,near=[],enemy=opp(p);
+        for(var dr=-1;dr<=1;dr++)for(var dc=-1;dc<=1;dc++){
+          if(!dr&&!dc)continue;
+          var rr=r+dr,cc=c+dc;
+          if(rr>=0&&rr<N&&cc>=0&&cc<N){
+            var ni=rr*N+cc;
+            if(!board[ni]||board[ni]===enemy||ni===freezeLockIndex)near.push(ni);
+          }
+        }
+        for(var q=near.length-1;q>0;q--){var z=Math.floor(Math.random()*(q+1)),tmp=near[q];near[q]=near[z];near[z]=tmp;}
+        blackholeChildIndices=near.slice(0,Math.min(2,near.length));
+        if(blackholeChildIndices.length)welzaBlackholeSfx('absorb');
+        blackholeChildIndices.forEach(function(idx){
+          if(idx===freezeLockIndex)clearFreezeLock();
+          if(board[idx]){board[idx]=null;fxk[idx]='erase';}
+        });
+        render();
+        // Keep the two child holes visible together briefly, then remove them together.
+        setTimeout(function(){
+          blackholeChildIndices=[];render();busy=false;
+          // A black-hole activation still consumes the user's turn. Route the
+          // hand-off through finishTurnAfterLock so an Aoi lock expires at the
+          // end of this victim turn, even when the turn contained a black hole.
+          // If no square remains, preserve the existing pass behavior (same
+          // player retains the turn) while still expiring the victim's lock.
+          var next=empties(board).length===0?p:opp(p);
+          finishTurnAfterLock(p,next);
+        },620);
+      });
+      return;
+    }
+    if(pending==='erase'){
+      // Mika selects targets first; do not remove either mark until after her cut-in and magic circle.
+      mikaEraseFirstIndex=i;mikaEraseSecondIndex=-1;
+      var enemyCount=board.filter(function(v){return v===opp(p);}).length;
+      if(enemyCount>=2){pending='erase2';render();setStatus();return;}
+      consumeSkill(p);pending=null;busy=true;render();setStatus();
+      say(p,function(){
+        if(mikaEraseFirstIndex>=0&&board[mikaEraseFirstIndex]===opp(p)){
+          board[mikaEraseFirstIndex]=null;fxk[mikaEraseFirstIndex]='erase';
+        }
+        mikaEraseFirstIndex=-1;mikaEraseSecondIndex=-1;
+        render();after();
+      });
+      return;
+    }
+    if(pending==='erase2'){
+      mikaEraseSecondIndex=i;
+      consumeSkill(p);pending=null;busy=true;render();setStatus();
+      say(p,function(){
+        [mikaEraseFirstIndex,mikaEraseSecondIndex].forEach(function(idx){
+          if(idx>=0&&board[idx]===opp(p)){board[idx]=null;fxk[idx]='erase';}
+        });
+        mikaEraseFirstIndex=-1;mikaEraseSecondIndex=-1;
+        render();after();
+      });
+      return;
+    }
+    if(pending==='flip'){
+      consumeSkill(p);pending=null;busy=true;render();setStatus();
+      say(p,function(){
+        board[i]=p;fxk[i]='flip';busy=false;render();after();
+      });
+      return;
+    }
+    if(pending==='swapOwn2'){warpFrom=i;pending='swap2';render();setStatus();return;}
+    if(pending==='swap2'){var swapTarget=i;busy=true;consumeSkill(p);pending=null;render();setStatus();say(p,function(){board[warpFrom]=opp(p);board[swapTarget]=p;fxk[warpFrom]=fxk[swapTarget]='swap';busy=false;render();after();});return;}
+    var useFreeze=pending==='freeze';
+    var useShuffle=pending==='shuffle';
+    if(pending==='swapPlace'){board[i]=p;if(chars[p]==='welza')playWelzaPlaceVoice();else welzaBlackholeSfx('mark');pending='swapOwn2';if(chars[p]!=='welza')playCharacterPlaceSfx(p);render();setStatus();return;}
+    board[i]=p;
+    if(chars[p]==='welza')playWelzaPlaceVoice();else if(chars[p]!=='sora')welzaBlackholeSfx('mark');
+    if(useFreeze){consumeSkill(p);pending=null;return activateAoiFreeze(p);}
+    if(useShuffle){
+      consumeSkill(p);pending=null;busy=true;playCharacterPlaceSfx(p);render();setStatus();
+      return say(p,function(){performSoraShuffle(p,function(){finishTurnAfterLock(p,opp(p));});});
+    }
+    if(chars[p]==='aoi'){try{aoiPlaceSfx.pause();aoiPlaceSfx.currentTime=0;var placeSfxPlay=aoiPlaceSfx.play();if(placeSfxPlay&&placeSfxPlay.catch)placeSfxPlay.catch(function(){});}catch(err){}}
+    else if(chars[p]==='mika')playMikaPlaceSfx();else if(chars[p]==='luna')playLunaPlaceSfx();else if(chars[p]==='haru')playHaruPlaceSfx();else if(chars[p]==='sora')playSoraPlaceSfx();after();
+  }
+
+  function playCharacterPlaceSfx(mark){
+    var id=chars[mark];
+    if(id==='aoi'){try{aoiPlaceSfx.pause();aoiPlaceSfx.currentTime=0;var q=aoiPlaceSfx.play();if(q&&q.catch)q.catch(function(){});}catch(err){}}
+    else if(id==='mika')playMikaPlaceSfx();
+    else if(id==='luna')playLunaPlaceSfx();
+    else if(id==='haru')playHaruPlaceSfx();
+    else if(id==='sora')playSoraPlaceSfx(); // same dedicated Sora placement sound for human and CPU
+    else if(id==='welza')playWelzaPlaceVoice(); // shared by human and CPU placements
+  }
+
+  // ---- CPU ----
+  function evalB(b){
+    var s=0;
+    windows.forEach(function(w){
+      var o=0,x=0;
+      for(var t=0;t<w.length;t++){if(b[w[t]]==='O')o++;else if(b[w[t]]==='X')x++;}
+      if(o===0&&x>0)s+=Math.pow(8,x);
+      if(x===0&&o>0)s-=Math.pow(8,o)*1.1;
+    });
+    return s;
+  }
+  function oppCanWin(b,p){
+    for(var i=0;i<b.length;i++){if(b[i]||i===freezeLockIndex)continue;b[i]=p;var w=wins(b,p);b[i]=null;if(w)return true;}
+    return false;
+  }
+  function cpuShouldUseSkill(mark,extraMoves){
+    var occupied=board.filter(Boolean).length+(extraMoves||0);
+    var unlock=cpuSkillUnlockAt[mark]|| (K===3?3:5);
+    if(occupied<unlock)return false;
+    // Usually save the skill for a more interesting moment, but use it more readily
+    // when the opponent is threatening an immediate win.
+    var threatened=oppCanWin(board,opp(mark));
+    return threatened||Math.random()<0.58;
+  }
+
+  function cpuChoose(){
+    var cpuMark=opp(humanMark);
+    var b=board.map(function(v){return v===cpuMark?'X':v===humanMark?'O':null;}),e=empties(b),i,j;
+    if(cfg.mode==='weak'){
+      for(i=0;i<e.length;i++){b[e[i]]='X';var w=wins(b,'X');b[e[i]]=null;if(w)return{type:'place',i:e[i]};}
+      return{type:'place',i:e[Math.floor(Math.random()*e.length)]};
+    }
+    var candidates=[],m=K===3?1:6;
+    function consider(a,nb,cost){
+      var v;
+      if(wins(nb,'X'))v=1e9;else{v=evalB(nb)-cost;if(oppCanWin(nb,'O'))v-=1e6;}
+      candidates.push({action:a,score:v});
+    }
+    e.forEach(function(i){var nb=b.slice();nb[i]='X';consider({type:'place',i:i},nb,0);});
+    var cpuSide=opp(humanMark),key=ch(cpuSide).skill;
+    if(cfg.skills&&skills[cpuSide]&&key!=='freeze'&&cpuShouldUseSkill(cpuSide,0)){
+      if(key==='erase'){
+        for(j=0;j<b.length;j++){
+          if(b[j]!=='O')continue;
+          var n1=b.slice();n1[j]=null;var bk=-1,bs=-Infinity;
+          for(var q=0;q<b.length;q++){if(n1[q]!=='O')continue;var n5=n1.slice();n5[q]=null;var sc=evalB(n5);if(sc>bs){bs=sc;bk=q;}}
+          if(bk>=0)n1[bk]=null;
+          consider({type:'erase',i:j,k:bk},n1,(bk>=0?60:40)*m);
+        }
+      }else if(key==='flip'){
+        for(j=0;j<b.length;j++){
+          if(b[j]!=='O')continue;
+          var n1=b.slice();n1[j]='X';if(!cfg.kill&&wins(n1,'X'))continue;consider({type:key,i:j},n1,40*m);
+        }
+      }else if(key==='freeze'){
+        // Aoi's freeze skill is activated after her normal placement in cpuTurn().
+        // Do not evaluate it as a swap action; there is no separate board move to score here.
+      }else if(key==='swap'){
+        for(j=0;j<b.length;j++){
+          if(b[j])continue;
+          for(var q=0;q<b.length;q++){if(b[q]!=='O')continue;var n3=b.slice();n3[j]='O';n3[q]='X';if(!cfg.kill&&wins(n3,'X'))continue;consider({type:'swap',j:j,i:q},n3,40*m);}
+        }
+      }
+    }
+    if(!candidates.length)return null;
+    // Keep tactically strong moves, but add enough controlled variety that repeated
+    // matchups do not replay the exact same opening every time.
+    var top=-Infinity;
+    candidates.forEach(function(c){if(c.score>top)top=c.score;});
+    var varietyBand=K===3?18:55;
+    var pool=candidates.filter(function(c){return c.score>=top-varietyBand;});
+    // Never randomize away an immediate winning move.
+    if(top>=1e9)pool=candidates.filter(function(c){return c.score>=1e9;});
+    return pool[Math.floor(Math.random()*pool.length)].action;
+  }
+  function cpuTurn(){
+    if(cfg.mode==='watch')humanMark=opp(turn);
+    var cpuMark=cfg.mode==='watch'?turn:opp(humanMark);
+    var nextTurn=opp(cpuMark);
+    function continueCpuTurn(){
+      if(freezeLockVictim===cpuMark){
+        busy=true;freezeBreakingIndex=freezeLockIndex;render();setStatus();
+        setTimeout(function(){
+          clearFreezeLock();freezeBreakingIndex=-1;
+          render();busy=false;
+          if(checkEnd())return;
+          turn=nextTurn;if(blackholeIndex>=0&&turn===blackholeOwner)fadeOutBlackhole();render();setStatus();
+          if(cfg.mode==='watch'&&!over)cpuTurn();
+        },760);
+        return;
+      }
+      if(checkEnd())return;
+      turn=nextTurn;if(blackholeIndex>=0&&turn===blackholeOwner)fadeOutBlackhole();render();setStatus();
+      if(cfg.mode==='watch'&&!over)cpuTurn();
+    }
+    busy=true;render();
+    setTimeout(function(){
+      var a=cpuChoose();
+      if(cfg.skills&&chars[cpuMark]==='welza'&&skills[cpuMark]&&cpuShouldUseSkill(cpuMark,0)){
+        var bhTargets=[];for(var bi=0;bi<board.length;bi++)if(bi!==blackholeIndex)bhTargets.push(bi);
+        if(bhTargets.length){
+          // cpuTurn enters with busy=true; release that guard before routing the
+          // CPU's chosen square through the normal black-hole placement handler.
+          // handle() immediately takes busy again and owns the asynchronous skill flow.
+          busy=false;turn=cpuMark;pending='blackhole';remote=true;
+          handle(bhTargets[Math.floor(Math.random()*bhTargets.length)]);
+          remote=false;return;
+        }
+      }
+      if(!a){
+        busy=false;
+        if(freezeLockVictim===cpuMark)clearFreezeLock();
+        turn=nextTurn;if(blackholeIndex>=0&&turn===blackholeOwner)fadeOutBlackhole();render();setStatus();
+        if(cfg.mode==='watch'&&!over)cpuTurn();
+        return;
+      }
+      // Aoi: show the cut-in first, then place her mark, then resolve the freeze.
+      if(a.type==='place'&&cfg.skills&&chars[cpuMark]==='aoi'&&skills[cpuMark]&&cpuShouldUseSkill(cpuMark,1)&&!checkEnd()){
+        consumeSkill(cpuMark);turn=cpuMark;
+        activateAoiFreeze(cpuMark,function(){
+          board[a.i]=cpuMark;playCharacterPlaceSfx(cpuMark);render();
+        });
+        return;
+      }
+      // Sora places her mark first, then reveals the cut-in and shuffles every square.
+      if(a.type==='place'&&cfg.skills&&chars[cpuMark]==='sora'&&skills[cpuMark]&&cpuShouldUseSkill(cpuMark,1)&&!checkEnd()){
+        consumeSkill(cpuMark);turn=cpuMark;busy=true;render();
+        board[a.i]=cpuMark;playCharacterPlaceSfx(cpuMark);render();
+        say(cpuMark,function(){
+          performSoraShuffle(cpuMark,function(){finishTurnAfterLock(cpuMark,nextTurn);});
+        });
+        return;
+      }
+      // Mika and Luna's skill actions now resolve only after their cut-in has finished.
+      if(a.type==='erase'||a.type==='flip'){
+        busy=true;render();
+        say(cpuMark,function(){
+          if(a.type==='erase'){
+            board[a.i]=null;fxk[a.i]='erase';
+            if(a.k>=0){fxk[a.k]='erase';board[a.k]=null;}
+          }else{
+            board[a.i]=cpuMark;fxk[a.i]='flip';
+          }
+          consumeSkill(cpuMark);render();busy=false;
+          continueCpuTurn();
+        });
+        return;
+      }
+      // Ordinary CPU placement (no skill) remains a normal visible move.
+      if(a.type==='place'){
+        busy=false;board[a.i]=cpuMark;playCharacterPlaceSfx(cpuMark);render();
+        continueCpuTurn();return;
+      }
+      // Haru: finish the cut-in, visibly place the selected mark, then perform the swap.
+      if(a.type==='swap'){
+        warpFrom=a.j;var cpuSwapTarget=a.i;consumeSkill(cpuMark);busy=true;render();
+        say(cpuMark,function(){
+          board[warpFrom]=cpuMark;playCharacterPlaceSfx(cpuMark);render();
+          setTimeout(function(){
+            board[warpFrom]=nextTurn;board[cpuSwapTarget]=cpuMark;
+            fxk[warpFrom]=fxk[cpuSwapTarget]='swap';
+            render();busy=false;
+            finishTurnAfterLock(cpuMark,nextTurn);
+          },360);
+        });
+        return;
+      }
+      busy=false;continueCpuTurn();
+    },650);
+  }
+
+  document.getElementById('startMatch').addEventListener('click',function(){
+    if(cfg.mode==='net'&&room&&!netOn){
+      var I=peerInfo();if(!I)return;
+      var hg=(I.me.peer<I.o.peer)?I.mg:I.g,og=(I.me.peer<I.o.peer)?I.g:I.mg;
+      if(!ready||!hg||hg.rd!==1||!og||og.rd!==1)return;
+      startRequested=true;this.hidden=true;pub();onNet();return;
+    }
+    if(!(cfg.mode==='strong'||cfg.mode==='weak'||cfg.mode==='two'||cfg.mode==='watch'))return;
+    // If the previous match has ended, prepare a fresh board before starting again.
+    if(over)reset();
+    if(gameStarted)return;
+    // Start the battle BGM directly from the user's Start button gesture.
+    // This also works when the CPU has the first move.
+    startBattleBgm();
+    gameStarted=true;
+    this.hidden=true;
+    noteEl.textContent=(first==='O'?'○':'×')+'が先手です';
+    render();setStatus();
+    if(isCpu(turn))cpuTurn();
+  });
+  // Restore the settings controls: each option updates cfg and rebuilds the board/UI.
+  document.querySelectorAll('.chip').forEach(function(ch){
+    ch.addEventListener('click',function(){
+      var k=ch.getAttribute('data-k'),v=ch.getAttribute('data-v');
+      if(cfg.mode==='net'&&room&&(!isHost||ready||netOn)&&['size','kill','skills','first'].indexOf(k)>=0)return;
+      document.querySelectorAll('.chip[data-k="'+k+'"]').forEach(function(o){o.setAttribute('aria-pressed','false');});
+      ch.setAttribute('aria-pressed','true');
+      if(k==='fx'){cfg.fx=v==='1';if(!cfg.fx)skipFx();return;}
+      if(k==='sound'){soundEnabled=v==='1';applySoundSetting();return;}
+      if(k==='cpuChar'){cfg.cpuChar=v;if(cfg.mode==='strong'||cfg.mode==='weak'){chars[opp(humanMark)]=v;reset();}return;}
+      if(k==='first'){
+        if(cfg.mode==='net'&&room&&(myRole==='X'||netOn))return;
+        firstChoice=v;
+        if(cfg.mode==='strong'||cfg.mode==='weak'){
+          humanMark=v;first='O';chars[humanMark]=humanChar;chars[opp(humanMark)]=cfg.cpuChar;
+        }else{
+          first=v;if(cfg.mode==='net'&&room){lastPub='';pub();}
+        }
+        score={O:0,D:0,X:0};setup();return;
+      }
+      if(k==='size')cfg.size=+v;
+      else if(k==='mode'){
+        if(cfg.mode==='net'&&v!=='net')leaveNet();
+        cfg.mode=v;document.getElementById('netbox').hidden=v!=='net';
+        if(v==='strong'||v==='weak'){
+          first='O';chars[humanMark]=humanChar;chars[opp(humanMark)]=cfg.cpuChar;
+        }else if(v==='two'||v==='watch'){firstChoice='O';first='O';if(v==='watch'){chars.O=humanChar;chars.X=cfg.cpuChar;}}
+      }else if(k==='kill')cfg.kill=v==='1';
+      else if(k==='skills')cfg.skills=(v==='inf'?Infinity:Number(v));
+      if(cfg.mode==='net'&&room&&(!isHost||ready||netOn)&&['size','kill','skills','first'].indexOf(k)>=0)return;
+      score={O:0,D:0,X:0};
+      if(cfg.mode==='strong'||cfg.mode==='weak'||cfg.mode==='two')first='O';
+      setup();
+      if(cfg.mode==='net'&&room&&isHost&&!ready){lastPub='';pub();}
+    });
+  });
+
+  var RM=window.matchMedia('(prefers-reduced-motion:reduce)'),winShow=true,fxLock=false,fxAt=0,fxT=0,P=[],TR=null,fxRun=false;
+  var fxc=document.getElementById('fxc'),fcx=fxc.getContext('2d');
+  function fxOn(){return cfg.fx&&!RM.matches;}
+  function cpos(i){
+    // Use the cell's untransformed layout box. getBoundingClientRect() includes
+    // Haru's pop animation (translateY) and can shift the winning line while
+    // the CPU immediately checks the result after placing/swapping a mark.
+    // The board and canvas share #stage as their positioned coordinate space,
+    // while offsetLeft/Top and offsetWidth/Height ignore the cell's animation.
+    var s=fxc.getBoundingClientRect(),b=boardEl.getBoundingClientRect(),c=cells[i];
+    return{
+      x:b.left-s.left+boardEl.clientLeft+c.offsetLeft+c.offsetWidth/2,
+      y:b.top-s.top+boardEl.clientTop+c.offsetTop+c.offsetHeight/2,
+      w:c.offsetWidth
+    };
+  }
+  function add(o){P.push(Object.assign({t0:performance.now(),life:800,vx:0,vy:0,g:0,sz:16},o));fxKick();}
+  function fxKick(){
+    var st=document.getElementById('stage'),d=window.devicePixelRatio||1;
+    if(fxc.width!==Math.round(st.clientWidth*d)){fxc.width=Math.round(st.clientWidth*d);fxc.height=Math.round(st.clientHeight*d);}
+    if(!fxRun){fxRun=true;requestAnimationFrame(fxFrame);}
+  }
+  function burst(c,x,y,sc){
+    var n=sc<1?1:3,i,a;
+    for(i=0;i<n;i++){a=Math.random()*6.28;
+      if(c==='mika')add({k:'♥',col:'#ff5c9e',x:x+(i-1)*14,y:y-8,vx:(i-1)*22,vy:-70-Math.random()*30,sz:16*Math.max(sc,.8)});
+      else if(c==='luna'){add({k:'★',col:'#ffc928',x:x+Math.cos(a)*22*sc,y:y+Math.sin(a)*22*sc,vy:-12,sz:14*Math.max(sc,.8)});if(i===0&&sc>=1)add({k:'☾',col:'#a477ff',x:x,y:y-20,vy:-14,rot:1,sz:22});}
+      else if(c==='aoi'){
+        if(i===0){
+          var crystalCount=sc<1?4:8;
+          for(var j=0;j<crystalCount;j++){
+            var ang=(Math.PI*2*j/crystalCount)+(Math.random()-.5)*.12,spd=65+Math.random()*45;
+            add({k:'diamond',col:j%2?'#69dfff':'#d9fbff',x:x,y:y,vx:Math.cos(ang)*spd,vy:Math.sin(ang)*spd,life:620,sz:8+Math.random()*4});
+          }
+          add({k:'snow',col:'#a9efff',x:x,y:y,vx:0,vy:-9,life:560,sz:17});
+          for(var q=0;q<4;q++)add({k:'dot',col:'#ffffff',x:x+(Math.random()-.5)*30,y:y+(Math.random()-.5)*30,vx:(Math.random()-.5)*45,vy:(Math.random()-.5)*45,life:420,sz:2+Math.random()*2});
+        }
+      }
+      else{add({k:'s',col:'#ff9f1c',x:x,y:y,vx:Math.cos(a)*150,vy:Math.sin(a)*150,life:450,sz:12});add({k:'s',col:'#ffd23f',x:x,y:y,vx:Math.cos(a+3)*110,vy:Math.sin(a+3)*110,life:400,sz:9});
+        if(i===0&&sc>=1)add({k:'g',col:'#f2a516',x:x,y:y,vx:(Math.random()-.5)*160,vy:-110,g:320,life:700,sz:18});}
+    }
+  }
+  function drawP(p){
+    var t=(performance.now()-p.t0)/1000,age=t*1000/p.life;if(age>1)return false;
+    fcx.save();fcx.globalAlpha=1-age*age;fcx.translate(p.x+p.vx*t,p.y+p.vy*t+p.g*t*t/2);
+    if(p.k==='s'){fcx.rotate(Math.atan2(p.vy,p.vx));fcx.strokeStyle=p.col;fcx.lineWidth=3;fcx.lineCap='round';fcx.beginPath();fcx.moveTo(0,0);fcx.lineTo(p.sz,0);fcx.stroke();}
+    else if(p.k==='g'){fcx.rotate(t*6);fcx.fillStyle=p.col;fcx.beginPath();fcx.arc(0,0,p.sz*.45,0,7);fcx.fill();for(var i=0;i<6;i++){fcx.rotate(1.047);fcx.fillRect(-p.sz*.12,-p.sz*.62,p.sz*.24,p.sz*.25);}}
+    else if(p.k==='diamond'){fcx.rotate(t*3);fcx.fillStyle=p.col;fcx.beginPath();fcx.moveTo(0,-p.sz);fcx.lineTo(p.sz*.55,0);fcx.lineTo(0,p.sz);fcx.lineTo(-p.sz*.55,0);fcx.closePath();fcx.fill();fcx.fillStyle='rgba(255,255,255,.9)';fcx.beginPath();fcx.moveTo(0,-p.sz*.48);fcx.lineTo(p.sz*.2,0);fcx.lineTo(0,p.sz*.48);fcx.lineTo(-p.sz*.2,0);fcx.closePath();fcx.fill();}
+    else if(p.k==='snow'){fcx.strokeStyle=p.col;fcx.lineWidth=1.8;fcx.lineCap='round';for(var si=0;si<6;si++){fcx.save();fcx.rotate(si*Math.PI/3+t*.7);fcx.beginPath();fcx.moveTo(0,0);fcx.lineTo(0,-p.sz);fcx.moveTo(0,-p.sz*.55);fcx.lineTo(-p.sz*.22,-p.sz*.78);fcx.moveTo(0,-p.sz*.55);fcx.lineTo(p.sz*.22,-p.sz*.78);fcx.stroke();fcx.restore();}}
+    else if(p.k==='dot'){fcx.fillStyle=p.col;fcx.beginPath();fcx.arc(0,0,p.sz,0,Math.PI*2);fcx.fill();}
+    else{if(p.rot)fcx.rotate(t*5);fcx.fillStyle=p.col;fcx.font='bold '+p.sz+'px sans-serif';fcx.textAlign='center';fcx.textBaseline='middle';fcx.fillText(p.k,0,0);}
+    fcx.restore();return true;
+  }
+  function fxFrame(now){
+    var d=window.devicePixelRatio||1;fcx.setTransform(d,0,0,d,0,0);fcx.clearRect(0,0,fxc.width,fxc.height);
+    if(TR)drawTrace(now);
+    P=P.filter(drawP);
+    if(TR||P.length)requestAnimationFrame(fxFrame);else fxRun=false;
+  }
+  function trace(w){
+    var L=w.line,a=cpos(L[0]),b=cpos(L[L.length-1]),dx=b.x-a.x,dy=b.y-a.y,n=Math.hypot(dx,dy)||1,e=a.w*.3;
+    TR={c:chars[w.p],a:{x:a.x-dx/n*e,y:a.y-dy/n*e},b:{x:b.x+dx/n*e,y:b.y+dy/n*e},w:a.w,t0:performance.now(),dur:800,last:0};
+    fxLock=true;fxAt=performance.now();document.getElementById('stage').classList.add('lock');fxKick();
+    clearTimeout(fxT);fxT=setTimeout(skipFx,1250);
+  }
+  function drawTrace(now){
+    var t=TR,p=Math.min(1,(now-t.t0)/t.dur),e=1-Math.pow(1-p,2),x=t.a.x+(t.b.x-t.a.x)*e,y=t.a.y+(t.b.y-t.a.y)*e,w=t.w,c=t.c;
+    function ln(col,lw){fcx.strokeStyle=col;fcx.lineWidth=lw;fcx.beginPath();fcx.moveTo(t.a.x,t.a.y);fcx.lineTo(x,y);fcx.stroke();}
+    fcx.save();fcx.lineCap='round';fcx.shadowBlur=16;
+    if(c==='mika'){fcx.shadowColor='#ff5c9e';ln('#ff5c9e',w*.24);ln('#fff',w*.08);}
+    else if(c==='aoi'){fcx.shadowColor='#39cfff';ln('#168dff',w*.25);ln('#baf7ff',w*.12);ln('#fff',w*.045);
+      fcx.fillStyle='#e8fdff';fcx.font='bold '+w*.58+'px sans-serif';fcx.textAlign='center';fcx.textBaseline='middle';fcx.fillText('✦',x,y);}
+    else if(c==='luna'){fcx.shadowColor='#8a4dff';var g=fcx.createLinearGradient(t.a.x,t.a.y,x,y);g.addColorStop(0,'rgba(138,77,255,0)');g.addColorStop(1,'#ffd23f');ln(g,w*.14);
+      fcx.fillStyle='#ffe27a';fcx.font='bold '+w*.6+'px sans-serif';fcx.textAlign='center';fcx.textBaseline='middle';fcx.fillText('☾',x,y);}
+    else{fcx.shadowColor='#ff9f1c';ln('#ff9f1c',w*.16);ln('#4fd8ff',w*.05);
+      fcx.translate(x,y);fcx.rotate(Math.atan2(t.b.y-t.a.y,t.b.x-t.a.x));fcx.fillStyle='#ffb13b';fcx.beginPath();fcx.moveTo(w*.32,0);fcx.lineTo(-w*.15,-w*.26);fcx.lineTo(-w*.04,0);fcx.lineTo(-w*.15,w*.26);fcx.fill();}
+    fcx.restore();
+    if(now-t.last>70){t.last=now;burst(c,x,y,.55);}
+    if(p>=1){var mx=(t.a.x+t.b.x)/2,my=(t.a.y+t.b.y)/2;burst(c,mx,my,1.4);burst(c,t.a.x*.5+mx*.5,t.a.y*.5+my*.5,1.4);burst(c,t.b.x*.5+mx*.5,t.b.y*.5+my*.5,1.4);TR=null;winShow=true;render();}
+  }
+  function skipFx(){clearTimeout(fxT);TR=null;P=[];winShow=true;fxLock=false;document.getElementById('stage').classList.remove('lock');render();}
+  document.getElementById('stage').addEventListener('click',function(){if(fxLock&&performance.now()-fxAt>400)skipFx();});
+  function pub(){
+    if(!room)return;var d={g:{r:round,ch:chars[myRole],z:cfg.size,k:cfg.kill?1:0,s:skillSettingCode(),f:firstChoice,h:isHost?1:0,rd:ready?1:0,go:startRequested?1:0,lg:lg,end:over?1:0}},j=JSON.stringify(d);
+    if(j===lastPub)return;lastPub=j;room.presence(d).then(function(){},function(err){lastPub='';var n=document.getElementById('netmsg');if(n)n.textContent='通信データ送信エラー：'+(err&&err.message?err.message:'接続を確認してください')+'。自動再接続を試みます。';});
+  }
+  function peerInfo(){
+    if(!room)return null;var ps=room.peers(),me=null,o=null;
+    for(var i=0;i<ps.length;i++){var p=ps[i];
+      if(p.isMe){if(p.sameTab)me=p;}
+      else if(p.kind==='viewer'&&p.presence&&p.presence.g&&!o)o=p;}
+    if(!me||!o)return null;var g=o.presence.g;
+    if(typeof g.lg!=='string'||!/^[0-9a-oEFSZH]{0,200}$/.test(g.lg)||typeof g.r!=='number')return null;
+    return{me:me,o:o,g:g,mg:me.presence&&me.presence.g||{}};
+  }
+  function onNet(){
+    var I=peerInfo(),nm=document.getElementById('netmsg'),startBtn=document.getElementById('startMatch');
+    if(!I){if(room)nm.textContent='相手を待っています…(同じ合言葉を入れてもらってね)';return;}
+    // The earliest participant is the room host on BOTH devices; host always owns O.
+    isHost=I.mg.h===1?true:(I.g.h===1?false:I.me.peer<I.o.peer);
+    myRole=isHost?'O':'X';
+    var hg=isHost?I.mg:I.g,og=isHost?I.g:I.mg;
+    if(!hg||typeof hg.z!=='number')return;
+    if(!netOn){
+      chars[myRole]=myCh;
+      if(CH[og.ch])chars[opp(myRole)]=og.ch;
+      // Host settings are authoritative. Guests mirror them before ready/start.
+      if(!isHost){
+        if(hg.z===3||hg.z===5)cfg.size=hg.z;
+        cfg.kill=!!hg.k;cfg.skills=skillSettingFromCode(hg.s);
+        if(hg.f==='O'||hg.f==='X')firstChoice=hg.f;
+      }
+      document.querySelectorAll('.chip[data-k="size"],.chip[data-k="kill"],.chip[data-k="skills"],.chip[data-k="first"]').forEach(function(b){
+        var k=b.getAttribute('data-k'),v=b.getAttribute('data-v');
+        var chosen=k==='size'?String(cfg.size):k==='kill'?(cfg.kill?'1':'0'):k==='skills'?(cfg.skills===Infinity?'inf':String(cfg.skills)):firstChoice;
+        b.setAttribute('aria-pressed',v===chosen?'true':'false');
+        b.disabled=(!isHost||ready||netOn)&&['size','kill','skills','first'].indexOf(k)>=0;
+      });
+      nm.textContent=ready?'相手の準備を待っています…':'キャラをえらんで「準備OK」を押してね（'+(myRole==='O'?'○・ホスト':'×・ゲスト')+'）';
+      pub();render();
+      var bothReady=ready&&hg.rd===1&&og.rd===1;
+      startBtn.hidden=!bothReady;
+      if(bothReady){
+        nm.textContent=startRequested?(og.go===1?'両者の開始を確認中…':'相手の「試合開始」を待っています…'):'両者準備OK！「試合開始」を押してね';
+        if(startRequested)startBtn.hidden=true;
+        if(startRequested&&og.go===1){
+          // Both devices independently observe both start confirmations and initialize once.
+          netOn=true;
+          if(!isHost){cfg.size=hg.z;cfg.kill=!!hg.k;cfg.skills=skillSettingFromCode(hg.s);firstChoice=hg.f;}
+          first=(round%2===0?firstChoice:opp(firstChoice));
+          lg='';applied=0;lastPub='';setup();pub();
+          startBtn.hidden=true;nm.textContent='対戦開始！';
+          noteEl.textContent=(first==='O'?'○':'×')+'が先手です';
+        }
+      }else if(ready){startBtn.hidden=true;}
+    }
+    if(netOn&&og.r===round){
+      remote=true;
+      try{while(applied<og.lg.length){var c=og.lg.charAt(applied++);
+        if(c==='E'||c==='F'||c==='S'||c==='Z'||c==='H'||c==='W')useSkill({E:'erase',F:'flip',S:'swap',Z:'freeze',H:'shuffle',W:'blackhole'}[c]);else handle(parseInt(c,36));}}
+      finally{remote=false;}
+    }
+  }
+  function leaveNet(){
+    if(room){room.leave();room=null;}netOn=false;ready=false;startRequested=false;isHost=false;hostRules=null;lg='';applied=0;lastPub='';round=0;
+    document.getElementById('bReady').hidden=true;document.getElementById('bReady').disabled=false;document.getElementById('bJoin').hidden=false;
+    document.getElementById('netmsg').textContent='同じ合言葉を入れた2人で対戦できます。相手にも同じリンクを開いてもらってね。';
+  }
+  function connectToRoom(code,mode){
+    var nm=document.getElementById('netmsg');
+    if(!/^[a-z0-9][a-z0-9_.-]{0,19}$/.test(code)){nm.textContent='合言葉は英数字で入れてください。';return;}
+    if(!lobby){nm.textContent='通信ライブラリ未初期化。ページを再読み込みしてください。';return;}
+    if(room){try{room.leave();}catch(e){} room=null;}
+    netOn=false;ready=false;startRequested=false;isHost=(mode==='host');hostRules=null;lg='';applied=0;lastPub='';round=0;
+    document.getElementById('bReady').hidden=true;
+    document.getElementById('bReady').disabled=false;document.getElementById('startMatch').hidden=true;
+    document.getElementById('bJoin').hidden=false;
+    nm.textContent=(mode==='host'?'ホストルームを作成して接続中…':'ルームに参加中…');
+    lobby.join('mt-'+code,function(st,detail){
+      if(st==='SUBSCRIBED')nm.textContent=(mode==='host'?'ホストルーム作成OK。相手を待っています…':'ルーム接続OK。ホストを確認中…');
+      else if(st==='再接続中（CLOSED）'||st==='再接続中（CHANNEL_ERROR）'||st==='再接続中（TIMED_OUT）')nm.textContent='通信が切れたため自動再接続中…（対局データは保持しています）';
+      else if(st==='再接続完了')nm.textContent='通信再接続OK。対局を同期しています…';
+      else if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'||st==='CLOSED')nm.textContent='通信エラー：'+st+(detail?' / '+String(detail.message||detail):'');
+      else nm.textContent='通信状態：'+st;
+    }).then(function(r){
+      room=r;round=0;lg='';applied=0;netOn=false;ready=false;lastPub='';
+      r.onPeers(onNet);
+      document.getElementById('bReady').hidden=false;
+      document.getElementById('bJoin').hidden=true;
+      nm.textContent=(mode==='host'?'ホストルーム作成完了！合言葉「'+code+'」で相手を待っています。':'ルーム参加完了！ホストと接続しています…');
+      pub();setTimeout(onNet,300);
+    },function(err){
+      room=null;
+      nm.textContent='接続失敗：'+(err&&err.message?err.message:String(err||'原因不明'))+'。SupabaseのRealtime設定・通信環境を確認してください。';
+    });
+  }
+  document.getElementById('bMk').addEventListener('click',function(){
+    var t='';for(var i=0;i<4;i++)t+='abcdefghjkmnpqrstuvwxyz23456789'.charAt(Math.floor(Math.random()*31));
+    document.getElementById('code').value=t;
+    connectToRoom(t,'host');
+  });
+  document.getElementById('bJoin').addEventListener('click',function(){
+    var code=document.getElementById('code').value.trim().toLowerCase();
+    connectToRoom(code,'guest');
+  });
+  document.getElementById('bReady').addEventListener('click',function(){ready=true;this.disabled=true;pub();onNet();});
+  // Supabase Realtime adapter: keep the existing game UI/turn log, replace the old hosted-room dependency.
+  var SUPABASE_URL='https://bccvjjtsiogmtankberh.supabase.co';
+  var SUPABASE_PUBLISHABLE_KEY='sb_publishable_bvlWUjr7baA-RoblQRgMyQ_X3Lp_VmQ';
+  var sbClient=null;
+  var sbClientId='p'+Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+  var sbPeerOrder=Date.now()*1000+Math.floor(Math.random()*1000);
+  function makeSupabaseRoomAdapter(){
+    return {
+      join:function(topic,onStatus){
+        return new Promise(function(resolve,reject){
+          if(!sbClient){reject(new Error('Supabase SDKを読み込めませんでした'));return;}
+          var callbacks=[],currentChannel=null,settled=false,closedByUser=false,retryTimer=0,retryDelay=1200;
+          var latestData=null,trackQueue=Promise.resolve(),initialTimeout=0;
+          function notify(){callbacks.slice().forEach(function(fn){try{fn();}catch(e){}});}
+          function status(st,err){if(typeof onStatus==='function')try{onStatus(st,err);}catch(e){}}
+          function attach(ch){
+            ch.on('presence',{event:'sync'},notify);
+            ch.on('presence',{event:'join'},notify);
+            ch.on('presence',{event:'leave'},notify);
+          }
+          function sendLatest(){
+            if(!currentChannel||!latestData)return Promise.resolve();
+            var ch=currentChannel, payload={g:latestData.g,peer:sbPeerOrder,kind:'viewer',client:sbClientId};
+            trackQueue=trackQueue.catch(function(){}).then(function(){
+              if(closedByUser||ch!==currentChannel)return;
+              return ch.track(payload);
+            });
+            return trackQueue;
+          }
+          var adapter={
+            onPeers:function(fn){callbacks.push(fn);notify();},
+            presence:function(data){latestData=data;return sendLatest();},
+            peers:function(){
+              var state=currentChannel?currentChannel.presenceState():{},out=[];
+              Object.keys(state||{}).forEach(function(key){(state[key]||[]).forEach(function(meta){
+                var isSelf=meta.client===sbClientId;
+                out.push({isMe:isSelf,sameTab:isSelf,peer:Number(meta.peer)||0,kind:meta.kind||'viewer',presence:{g:meta.g}});
+              });});return out;
+            },
+            leave:function(){closedByUser=true;clearTimeout(retryTimer);clearTimeout(initialTimeout);var ch=currentChannel;currentChannel=null;if(ch){try{sbClient.removeChannel(ch);}catch(e){}}}
+          };
+          function openChannel(isInitial){
+            if(closedByUser)return;
+            var ch=sbClient.channel(topic,{config:{presence:{key:sbClientId}}});
+            currentChannel=ch;attach(ch);
+            ch.subscribe(function(st,err){
+              if(closedByUser||ch!==currentChannel)return;
+              if(st==='SUBSCRIBED'){
+                retryDelay=1200;status(isInitial?'SUBSCRIBED':'再接続完了',null);
+                if(!settled){settled=true;clearTimeout(initialTimeout);resolve(adapter);}
+                if(latestData)sendLatest().then(notify).catch(function(e){status('送信再試行待ち',e);});
+                notify();
+              }else if(st==='CLOSED'||st==='CHANNEL_ERROR'||st==='TIMED_OUT'){
+                status(settled?'再接続中（'+st+'）':st,err);
+                if(!settled){settled=true;clearTimeout(initialTimeout);reject(err||new Error(st));return;}
+                currentChannel=null;
+                try{sbClient.removeChannel(ch);}catch(e){}
+                clearTimeout(retryTimer);
+                retryTimer=setTimeout(function(){openChannel(false);},retryDelay);
+                retryDelay=Math.min(retryDelay*1.7,10000);
+              }else if(st!=='SUBSCRIBED')status(st,err);
+            });
+          }
+          initialTimeout=setTimeout(function(){if(!settled){settled=true;if(currentChannel)try{sbClient.removeChannel(currentChannel);}catch(e){}reject(new Error('15秒以内に接続応答がありません（タイムアウト）'));}},15000);
+          openChannel(true);
+        });
+      }
+    };
+  }
+  function initSupabaseRoom(){
+    if(!window.supabase||!window.supabase.createClient){
+      var nm=document.getElementById('netmsg');if(nm)nm.textContent='通信ライブラリを読み込めません。ページを再読み込みしてください。';return;
+    }
+    try{sbClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);lobby=makeSupabaseRoomAdapter();}
+    catch(e){var nm=document.getElementById('netmsg');if(nm)nm.textContent='通信設定を初期化できませんでした。';}
+  }
+  initSupabaseRoom();
+  applySoundSetting();
+  setup();
+})();
+</script>
+
+<script>
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+  window.addEventListener('load', function(){ navigator.serviceWorker.register('./service-worker.js').catch(function(err){ console.warn('PWA service worker registration failed:', err); }); });
+}
+</script>
+</body>
+</html>
