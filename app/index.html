@@ -69,6 +69,9 @@ h1.title-logo img{display:block;width:100%;height:auto;max-height:250px;object-f
 #board.n5{grid-template-rows:repeat(5,1fr);gap:3px;padding:15% 10% 13%}
 #board.n5 .cell{border-radius:3px}
 #board.simple-board .cell{background:var(--card)}
+#board .cell{position:relative}
+#board .cell.target{outline:2px dashed var(--target);outline-offset:-4px}
+#board .cell.win{background:var(--win)}
 @media(max-width:360px){.skin-option img{height:56px}.skin-choices{gap:4px}}
 
 .cell.o{color:var(--o)} .cell.x{color:var(--x)}
@@ -679,7 +682,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
     <button class="chip" data-k="skills" data-v="2" aria-pressed="false">2回</button>
     <button class="chip" data-k="skills" data-v="inf" aria-pressed="false">∞</button>
   </div>
-  <div id="netbox" hidden><div class="opts"><input id="code" maxlength="20" placeholder="合言葉(英数字)" autocapitalize="off" autocomplete="off"><button class="nbtn" id="bMk" type="button">つくる</button><button class="nbtn" id="bJoin" type="button">参加</button><button class="nbtn" id="bReady" type="button" hidden>準備OK</button></div><div class="nm" id="netmsg">同じ合言葉を入れた2人で対戦できます。相手にも同じリンクを開いてもらってね。</div></div>
+  <div id="netbox" hidden><div class="opts"><input id="code" maxlength="20" placeholder="合言葉(英数字)" autocapitalize="off" autocomplete="off"><button class="nbtn" id="bMk" type="button">つくる</button><button class="nbtn" id="bJoin" type="button">参加</button><button class="nbtn" id="bReady" type="button" hidden>準備OK</button><button class="nbtn" id="bCancelStart" type="button" hidden>開始キャンセル</button><button class="nbtn" id="bReconnect" type="button" hidden>通信を再同期</button><button class="nbtn" id="bQuitMatch" type="button" hidden>試合をやめる</button><button class="nbtn" id="bLeaveRoom" type="button" hidden>部屋から退出</button></div><div class="nm" id="netmsg">同じ合言葉を入れた2人で対戦できます。相手にも同じリンクを開いてもらってね。</div></div>
   <div id="pick"></div>
   <div id="rule"></div>
   <div id="status" role="status" aria-live="polite"></div>
@@ -725,6 +728,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
   // Welza dedicated special-move button artwork
   IMG.skillButton.welza='assets/asset_046.png';
   var cfg={size:3,mode:'strong',skills:1,kill:false,fx:true,skin:'simple',cpuChar:'luna'};
+  var simpleBoardOnly=false;
   var soundEnabled=true;try{soundEnabled=localStorage.getItem('marubatsu_sound')!=='off';}catch(e){}
   var soraVictoryVoice=new Audio('assets/asset_047.mp3');soraVictoryVoice.preload='auto';soraVictoryVoice.volume=1.0;
   /* Explicitly refresh Welza's selectable character-frame artwork with the supplied pixel-art image. */
@@ -745,6 +749,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
   function av(c){return '<img alt="'+c.name+'" src="'+IMG.sp[c.id]+'">';}
   var chars={O:'mika',X:'luna'},cpuSkillUnlockAt={O:3,X:3},warpFrom=-1,first='O',firstChoice='O',humanMark='O',humanChar='mika',fxk={},prevB=[],popUntil={},gameStarted=false;
   var lobby=null,room=null,myRole='O',myCh='mika',round=0,lg='',applied=0,remote=false,netOn=false,ready=false,lastPub='',isHost=false,startRequested=false,hostRules=null;
+  var cancelVersion=0,quitVersion=0,lastPeerCancel=0,lastPeerQuit=0;
   function local(p){return cfg.mode==='net'?p===myRole:cfg.mode==='two'?true:p===humanMark;}
   function ch(p){return CH[chars[p]];}
   var cutT=0,victoryT=0,victoryHideT=0;
@@ -757,6 +762,13 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
     if(over&&(cfg.mode==='strong'||cfg.mode==='weak'||cfg.mode==='two'||cfg.mode==='watch')){
       var startBtn=document.getElementById('startMatch');
       if(startBtn)startBtn.hidden=false;
+    }
+    if(over&&cfg.mode==='net'){
+      document.getElementById('bQuitMatch').hidden=true;
+      document.getElementById('bReady').hidden=false;
+      document.getElementById('bReady').disabled=false;
+      document.getElementById('startMatch').hidden=true;
+      document.getElementById('netmsg').textContent='結果演出が終了しました。準備OKを押すと再戦できます。';
     }
   }
   function showVictory(p){
@@ -792,7 +804,22 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
   document.getElementById('victory').addEventListener('click',hideVictory);
   var welzaPlaceVoice = new Audio('assets/asset_051.mp3');
   welzaPlaceVoice.preload='auto'; welzaPlaceVoice.volume=1.0;
-  function playWelzaPlaceVoice(){if(!soundEnabled)return;duckBgmForWelza(1200);try{welzaPlaceVoice.pause();welzaPlaceVoice.currentTime=0;var q=welzaPlaceVoice.play();if(q&&q.catch)q.catch(function(){});}catch(e){}}
+  // Boost Welza's placement voice above the normal HTMLAudio volume ceiling.
+  var welzaPlaceBoostCtx=null,welzaPlaceBoostGain=null,welzaPlaceBoostReady=false;
+  function prepareWelzaPlaceBoost(){
+    if(welzaPlaceBoostReady)return;
+    var AC=window.AudioContext||window.webkitAudioContext;
+    if(!AC)return;
+    try{
+      welzaPlaceBoostCtx=new AC();
+      var source=welzaPlaceBoostCtx.createMediaElementSource(welzaPlaceVoice);
+      welzaPlaceBoostGain=welzaPlaceBoostCtx.createGain();
+      welzaPlaceBoostGain.gain.value=1.8;
+      source.connect(welzaPlaceBoostGain);welzaPlaceBoostGain.connect(welzaPlaceBoostCtx.destination);
+      welzaPlaceBoostReady=true;
+    }catch(e){welzaPlaceBoostCtx=null;welzaPlaceBoostGain=null;}
+  }
+  function playWelzaPlaceVoice(){if(!soundEnabled)return;duckBgmForWelza(1200);try{prepareWelzaPlaceBoost();if(welzaPlaceBoostCtx&&welzaPlaceBoostCtx.state==='suspended')welzaPlaceBoostCtx.resume().catch(function(){});welzaPlaceVoice.pause();welzaPlaceVoice.currentTime=0;welzaPlaceVoice.volume=1.0;var q=welzaPlaceVoice.play();if(q&&q.catch)q.catch(function(){});}catch(e){}}
   var mikaSkillVoice = new Audio('assets/asset_052.mp3');
   var mikaSkillSfx = new Audio('assets/asset_053.mp3');
   var lunaSkillVoice = new Audio('assets/asset_054.wav');
@@ -1138,10 +1165,10 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
   var soraSkillVoice = new Audio('assets/asset_086.mp3');
   soraSkillVoice.preload='auto';soraSkillVoice.volume=1.0;
   var soraPlaceVoice = new Audio('assets/asset_087.mp3');
-  soraPlaceVoice.preload='auto';soraPlaceVoice.volume=1.0;
+  soraPlaceVoice.preload='auto';soraPlaceVoice.volume=0.4;
   function playSoraPlaceSfx(){
     if(!soundEnabled)return;
-    try{soraPlaceVoice.pause();soraPlaceVoice.currentTime=0;soraPlaceVoice.loop=false;soraPlaceVoice.volume=1.0;var p=soraPlaceVoice.play();if(p&&p.catch)p.catch(function(){});}catch(err){}
+    try{soraPlaceVoice.pause();soraPlaceVoice.currentTime=0;soraPlaceVoice.loop=false;soraPlaceVoice.volume=0.4;var p=soraPlaceVoice.play();if(p&&p.catch)p.catch(function(){});}catch(err){}
   }
   var soraTornadoMagicSfx = new Audio('assets/asset_088.mp3');
   soraTornadoMagicSfx.preload='auto';soraTornadoMagicSfx.volume=1.0;
@@ -1235,6 +1262,12 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
     }).join('');
   }
   buildSkinPicker();
+  // This build keeps only the Simple board skin selectable; all character and battle effects remain active.
+  if(skinEl){
+    Array.prototype.forEach.call(skinEl.querySelectorAll('.skin-option'),function(btn){
+      if(btn.getAttribute('data-skin')!=='simple')btn.hidden=true;
+    });
+  }
   skinEl.addEventListener('click',function(ev){
     var btn=ev.target.closest('.skin-option');
     if(!btn)return;
@@ -1400,9 +1433,11 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
       if(c.dataset.m!==mk){
         c.dataset.m=mk;
         var markClass=board[i]?(chars[board[i]]==='aoi'?' class="aoi-crystal-mark"':(chars[board[i]]==='sora'?' class="sora-mark"':(chars[board[i]]==='welza'?' class="welza-mark"':''))):'';
-        c.innerHTML=(i===blackholeIndex?'<img class="blackhole-mark'+(blackholeFading?' blackhole-fade-out':'')+'" alt="ブラックホール" src="'+WELZA_BLACKHOLE_GIF+'">':(board[i]?'<img'+markClass+' alt="'+(board[i]==='O'?'○':'×')+'" src="'+IMG.m[board[i]][chars[board[i]]]+'">':''))+
-          (i===freezeLockIndex?'<img class="freeze-lock-overlay" alt="氷のロック" src="'+IMG.lockAoi+'">':'')+
-          (blackholeChildIndices.indexOf(i)>=0?'<img class="blackhole-child-mark" alt="子ブラックホール" src="'+WELZA_BLACKHOLE_GIF+'">':'');
+        c.innerHTML=simpleBoardOnly
+          ? ((board[i]?'<span class="plain-mark">'+(board[i]==='O'?'○':'×')+'</span>':'')+(i===blackholeIndex?'<span class="plain-special">🌀</span>':'')+(i===freezeLockIndex?'<span class="plain-special">❄</span>':'')+(blackholeChildIndices.indexOf(i)>=0?'<span class="plain-special">·</span>':''))
+          : ((i===blackholeIndex?'<img class="blackhole-mark'+(blackholeFading?' blackhole-fade-out':'')+'" alt="ブラックホール" src="'+WELZA_BLACKHOLE_GIF+'">':(board[i]?'<img'+markClass+' alt="'+(board[i]==='O'?'○':'×')+'" src="'+IMG.m[board[i]][chars[board[i]]]+'">':''))+
+            (i===freezeLockIndex?'<img class="freeze-lock-overlay" alt="氷のロック" src="'+IMG.lockAoi+'">':'')+
+            (blackholeChildIndices.indexOf(i)>=0?'<img class="blackhole-child-mark" alt="子ブラックホール" src="'+WELZA_BLACKHOLE_GIF+'">':''));
       }
       if(nw)popUntil[i]=Date.now()+(chars[board[i]]==='welza'?760:520);
       var popActive=!!board[i]&&popUntil[i]>Date.now();
@@ -1489,7 +1524,16 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
     if(w){over=true;winLine=w.line;winShow=!fxOn();if(fxOn()){trace(w);clearTimeout(victoryT);victoryT=setTimeout(function(){showVictory(w.p);},900);}else{showVictory(w.p);}score[w.p]++;
       statusEl.textContent=cfg.mode==='two'?(w.p==='O'?'○の勝ち!':'×の勝ち!'):(w.p===(cfg.mode==='net'?myRole:humanMark)?'あなたの勝ち!':cfg.mode==='net'?'相手の勝ち…':'CPUの勝ち…');
     }else if(!empties(board).length){over=true;score.D++;statusEl.textContent='ひきわけ';showDraw();}
-    render();if(cfg.mode==='net'&&!remote)pub();return over;
+    render();
+    if(cfg.mode==='net'&&over){
+      netOn=false;ready=false;startRequested=false;
+      document.getElementById('bQuitMatch').hidden=true;
+      document.getElementById('bCancelStart').hidden=true;
+      document.getElementById('bReady').hidden=true;
+      document.getElementById('startMatch').hidden=true;
+      document.getElementById('netmsg').textContent='試合終了！結果演出中…';
+    }
+    if(cfg.mode==='net'&&!remote)pub();return over;
   }
   // Rank the opponent's legal replies after Aoi has placed her own mark.
   // Immediate wins are preferred, then immediate blocks, then the strongest open line.
@@ -2207,7 +2251,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
   function skipFx(){clearTimeout(fxT);TR=null;P=[];winShow=true;fxLock=false;document.getElementById('stage').classList.remove('lock');render();}
   document.getElementById('stage').addEventListener('click',function(){if(fxLock&&performance.now()-fxAt>400)skipFx();});
   function pub(){
-    if(!room)return;var d={g:{r:round,ch:chars[myRole],z:cfg.size,k:cfg.kill?1:0,s:skillSettingCode(),f:firstChoice,h:isHost?1:0,rd:ready?1:0,go:startRequested?1:0,lg:lg,end:over?1:0}},j=JSON.stringify(d);
+    if(!room)return;var d={g:{r:round,ch:chars[myRole],z:cfg.size,k:cfg.kill?1:0,s:skillSettingCode(),f:firstChoice,h:isHost?1:0,rd:ready?1:0,go:startRequested?1:0,cv:cancelVersion,qv:quitVersion,lg:lg,end:over?1:0}},j=JSON.stringify(d);
     if(j===lastPub)return;lastPub=j;room.presence(d).then(function(){},function(err){lastPub='';var n=document.getElementById('netmsg');if(n)n.textContent='通信データ送信エラー：'+(err&&err.message?err.message:'接続を確認してください')+'。自動再接続を試みます。';});
   }
   function peerInfo(){
@@ -2227,6 +2271,25 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
     myRole=isHost?'O':'X';
     var hg=isHost?I.mg:I.g,og=isHost?I.g:I.mg;
     if(!hg||typeof hg.z!=='number')return;
+    var peerCv=Number(og.cv)||0,peerQv=Number(og.qv)||0;
+    if(peerCv!==lastPeerCancel){
+      lastPeerCancel=peerCv;ready=false;startRequested=false;
+      document.getElementById('bReady').disabled=false;
+      document.getElementById('startMatch').hidden=true;
+      document.getElementById('bCancelStart').hidden=true;
+      nm.textContent='相手が開始をキャンセルしました。キャラを選び直して、もう一度準備OKを押してください。';
+      pub();
+    }
+    if(peerQv!==lastPeerQuit){
+      lastPeerQuit=peerQv;netOn=false;ready=false;startRequested=false;over=false;
+      document.getElementById('bReady').disabled=false;
+      document.getElementById('bReady').hidden=false;
+      document.getElementById('startMatch').hidden=true;
+      document.getElementById('bQuitMatch').hidden=true;
+      document.getElementById('bCancelStart').hidden=true;
+      nm.textContent='相手が試合を終了しました。キャラ選択から再戦できます。';
+      setup();pub();
+    }
     if(!netOn){
       chars[myRole]=myCh;
       if(CH[og.ch])chars[opp(myRole)]=og.ch;
@@ -2244,21 +2307,31 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
       });
       nm.textContent=ready?'相手の準備を待っています…':'キャラをえらんで「準備OK」を押してね（'+(myRole==='O'?'○・ホスト':'×・ゲスト')+'）';
       pub();render();
-      var bothReady=ready&&hg.rd===1&&og.rd===1;
+      var charsValid=!!CH[hg.ch]&&!!CH[og.ch]&&chars[myRole]===myCh&&chars[opp(myRole)]===(isHost?og.ch:hg.ch);
+      var bothReady=ready&&hg.rd===1&&og.rd===1&&charsValid;
       startBtn.hidden=!bothReady;
+      if(ready&&hg.rd===1&&og.rd===1&&!charsValid){
+        nm.textContent='キャラクター情報が一致しません。選択し直して準備OKを押してください。';
+        ready=false;startRequested=false;document.getElementById('bReady').disabled=false;pub();
+      }
       if(bothReady){
         nm.textContent=startRequested?(og.go===1?'両者の開始を確認中…':'相手の「試合開始」を待っています…'):'両者準備OK！「試合開始」を押してね';
         if(startRequested)startBtn.hidden=true;
+        document.getElementById('bCancelStart').hidden=!(startRequested||og.go===1);
         if(startRequested&&og.go===1){
           // Both devices independently observe both start confirmations and initialize once.
           netOn=true;
           if(!isHost){cfg.size=hg.z;cfg.kill=!!hg.k;cfg.skills=skillSettingFromCode(hg.s);firstChoice=hg.f;}
           first=(round%2===0?firstChoice:opp(firstChoice));
           lg='';applied=0;lastPub='';setup();pub();
-          startBtn.hidden=true;nm.textContent='対戦開始！';
+          startBtn.hidden=true;
+          document.getElementById('bCancelStart').hidden=true;
+          document.getElementById('bQuitMatch').hidden=false;
+          nm.textContent='対戦開始！';
           noteEl.textContent=(first==='O'?'○':'×')+'が先手です';
         }
       }else if(ready){startBtn.hidden=true;}
+      if(!bothReady)document.getElementById('bCancelStart').hidden=true;
     }
     if(netOn&&og.r===round){
       remote=true;
@@ -2270,6 +2343,9 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
   function leaveNet(){
     if(room){room.leave();room=null;}netOn=false;ready=false;startRequested=false;isHost=false;hostRules=null;lg='';applied=0;lastPub='';round=0;
     document.getElementById('bReady').hidden=true;document.getElementById('bReady').disabled=false;document.getElementById('bJoin').hidden=false;
+    document.getElementById('bLeaveRoom').hidden=true;document.getElementById('bReconnect').hidden=true;
+    document.getElementById('bQuitMatch').hidden=true;document.getElementById('bCancelStart').hidden=true;
+    document.getElementById('startMatch').hidden=true;
     document.getElementById('netmsg').textContent='同じ合言葉を入れた2人で対戦できます。相手にも同じリンクを開いてもらってね。';
   }
   function connectToRoom(code,mode){
@@ -2293,6 +2369,8 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
       r.onPeers(onNet);
       document.getElementById('bReady').hidden=false;
       document.getElementById('bJoin').hidden=true;
+      document.getElementById('bLeaveRoom').hidden=false;
+      document.getElementById('bReconnect').hidden=false;
       nm.textContent=(mode==='host'?'ホストルーム作成完了！合言葉「'+code+'」で相手を待っています。':'ルーム参加完了！ホストと接続しています…');
       pub();setTimeout(onNet,300);
     },function(err){
@@ -2310,6 +2388,35 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
     connectToRoom(code,'guest');
   });
   document.getElementById('bReady').addEventListener('click',function(){ready=true;this.disabled=true;pub();onNet();});
+  document.getElementById('bLeaveRoom').addEventListener('click',function(){
+    if(confirm('通信ルームから退出しますか？'))leaveNet();
+  });
+  document.getElementById('bCancelStart').addEventListener('click',function(){
+    if(!room||netOn)return;
+    cancelVersion++;ready=false;startRequested=false;
+    document.getElementById('bReady').disabled=false;
+    document.getElementById('bReady').hidden=false;
+    document.getElementById('startMatch').hidden=true;
+    this.hidden=true;pub();onNet();
+    document.getElementById('netmsg').textContent='試合開始をキャンセルしました。キャラを選び直して準備OKを押してください。';
+  });
+  document.getElementById('bQuitMatch').addEventListener('click',function(){
+    if(!room||!netOn)return;
+    if(!confirm('試合を終了してキャラ選択に戻りますか？'))return;
+    quitVersion++;netOn=false;ready=false;startRequested=false;over=false;
+    document.getElementById('bQuitMatch').hidden=true;
+    document.getElementById('bReady').hidden=false;
+    document.getElementById('bReady').disabled=false;
+    document.getElementById('startMatch').hidden=true;
+    setup();pub();onNet();
+    document.getElementById('netmsg').textContent='試合を終了しました。キャラ選択から再戦できます。';
+  });
+  document.getElementById('bReconnect').addEventListener('click',function(){
+    if(!room){document.getElementById('netmsg').textContent='ルームに接続していません。合言葉で再参加してください。';return;}
+    lastPub='';pub();
+    try{onNet();}catch(e){}
+    document.getElementById('netmsg').textContent='通信状態を確認し、現在の相手情報を再同期しました。接続が切れている場合は自動再接続を待ってください。';
+  });
   // Supabase Realtime adapter: keep the existing game UI/turn log, replace the old hosted-room dependency.
   var SUPABASE_URL='https://bccvjjtsiogmtankberh.supabase.co';
   var SUPABASE_PUBLISHABLE_KEY='sb_publishable_bvlWUjr7baA-RoblQRgMyQ_X3Lp_VmQ';
@@ -2386,6 +2493,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
     try{sbClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);lobby=makeSupabaseRoomAdapter();}
     catch(e){var nm=document.getElementById('netmsg');if(nm)nm.textContent='通信設定を初期化できませんでした。';}
   }
+  ['bCancelStart','bReconnect','bQuitMatch','bLeaveRoom'].forEach(function(id){var el=document.getElementById(id);if(el)el.hidden=true;});
   initSupabaseRoom();
   applySoundSetting();
   setup();
