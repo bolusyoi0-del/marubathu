@@ -750,7 +750,13 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
   var chars={O:'mika',X:'luna'},cpuSkillUnlockAt={O:3,X:3},warpFrom=-1,first='O',firstChoice='O',humanMark='O',humanChar='mika',fxk={},prevB=[],popUntil={},gameStarted=false;
   var lobby=null,room=null,myRole='O',myCh='mika',round=0,lg='',applied=0,remote=false,netOn=false,ready=false,lastPub='',isHost=false,startRequested=false,hostRules=null;
   var cancelVersion=0,quitVersion=0,lastPeerCancel=0,lastPeerQuit=0;
+  var pubTimer=0,pubPending=null,remoteLog='',lastGameBroadcast='',lastSyncRequestRound=-1,remoteDrainTimer=0,remoteProcessing=false,networkSeed=1;
   function local(p){return cfg.mode==='net'?p===myRole:cfg.mode==='two'?true:p===humanMark;}
+  function gameRandom(){
+    if(cfg.mode!=='net'||!netOn)return Math.random();
+    networkSeed=(Math.imul(1664525,networkSeed>>>0)+1013904223)>>>0;
+    return networkSeed/4294967296;
+  }
   function ch(p){return CH[chars[p]];}
   var cutT=0,victoryT=0,victoryHideT=0;
   function hideVictory(){
@@ -1357,7 +1363,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
     return empties(board).length>0&&hasOpp(p);
   }
   function cellOk(i){
-    if(over||busy||((cfg.mode==='strong'||cfg.mode==='weak')&&!gameStarted)||(!remote&&isCpu(turn))||(cfg.mode==='net'&&!netOn))return false;
+    if(over||busy||((cfg.mode==='strong'||cfg.mode==='weak')&&!gameStarted)||(!remote&&isCpu(turn))||(cfg.mode==='net'&&(!netOn||(!remote&&turn!==myRole))))return false;
     if(i===blackholeIndex)return false;
     if(pending==='blackhole')return true;
     if(i===freezeLockIndex)return false;
@@ -1501,7 +1507,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
   skillsEl.addEventListener('click',function(e){
     var b=e.target.closest('button');if(!b||b.disabled)return;
     var k=b.getAttribute('data-k');
-    if(cfg.mode==='net'){lg+={erase:'E',flip:'F',swap:'S',freeze:'Z',shuffle:'H',blackhole:'W'}[k];pub();}
+    if(cfg.mode==='net'&&room&&!remote){lg+={erase:'E',flip:'F',swap:'S',freeze:'Z',shuffle:'H',blackhole:'W'}[k];sendNetLog();}
     useSkill(k);
   });
   function useSkill(k){if(pending==='erase'||pending==='erase2'){mikaEraseFirstIndex=-1;mikaEraseSecondIndex=-1;}pending=pending===k?null:(k==='swap'?'swapPlace':k);render();setStatus();}
@@ -1541,7 +1547,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
       document.getElementById('startMatch').hidden=true;
       document.getElementById('netmsg').textContent='試合終了！結果演出中…';
     }
-    if(cfg.mode==='net'&&!remote)pub();return over;
+    if(cfg.mode==='net'&&!remote)pub(true);return over;
   }
   // Rank the opponent's legal replies after Aoi has placed her own mark.
   // Immediate wins are preferred, then immediate blocks, then the strongest open line.
@@ -1821,7 +1827,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
       stopSoraShuffleSfx();
       var shuffled=board.slice();
       for(var i=shuffled.length-1;i>0;i--){
-        var j=Math.floor(Math.random()*(i+1));
+        var j=Math.floor(gameRandom()*(i+1));
         var tmp=shuffled[i];shuffled[i]=shuffled[j];shuffled[j]=tmp;
       }
       board=shuffled;
@@ -1845,7 +1851,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
   function handle(i){
     if(!cellOk(i))return;
     startBattleBgm();
-    if(cfg.mode==='net'&&!remote){lg+=i.toString(36);pub();}
+    if(cfg.mode==='net'&&!remote){lg+=i.toString(36);sendNetLog();}
     var p=turn;noteEl.textContent='';
     if(pending==='blackhole'){
       consumeSkill(p);pending=null;busy=true;
@@ -1866,7 +1872,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
             if(!board[ni]||board[ni]===enemy||ni===freezeLockIndex)near.push(ni);
           }
         }
-        for(var q=near.length-1;q>0;q--){var z=Math.floor(Math.random()*(q+1)),tmp=near[q];near[q]=near[z];near[z]=tmp;}
+        for(var q=near.length-1;q>0;q--){var z=Math.floor(gameRandom()*(q+1)),tmp=near[q];near[q]=near[z];near[z]=tmp;}
         blackholeChildIndices=near.slice(0,Math.min(2,near.length));
         if(blackholeChildIndices.length)welzaBlackholeSfx('absorb');
         blackholeChildIndices.forEach(function(idx){
@@ -2127,7 +2133,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
         document.getElementById('netmsg').textContent='キャラクター情報または準備状態が未同期です。相手のキャラ表示を確認してから試合開始してください。';
         this.hidden=true;return;
       }
-      startRequested=true;this.hidden=true;pub();onNet();return;
+      startRequested=true;this.hidden=true;pub(true);onNet();return;
     }
     if(!(cfg.mode==='strong'||cfg.mode==='weak'||cfg.mode==='two'||cfg.mode==='watch'))return;
     // If the previous match has ended, prepare a fresh board before starting again.
@@ -2261,9 +2267,91 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
   }
   function skipFx(){clearTimeout(fxT);TR=null;P=[];winShow=true;fxLock=false;document.getElementById('stage').classList.remove('lock');render();}
   document.getElementById('stage').addEventListener('click',function(){if(fxLock&&performance.now()-fxAt>400)skipFx();});
-  function pub(){
-    if(!room)return;var d={g:{r:round,ch:myCh,z:cfg.size,k:cfg.kill?1:0,s:skillSettingCode(),f:firstChoice,h:isHost?1:0,rd:ready?1:0,go:startRequested?1:0,cv:cancelVersion,qv:quitVersion,lg:lg,end:over?1:0}},j=JSON.stringify(d);
-    if(j===lastPub)return;lastPub=j;room.presence(d).then(function(){},function(err){lastPub='';var n=document.getElementById('netmsg');if(n)n.textContent='通信データ送信エラー：'+(err&&err.message?err.message:'接続を確認してください')+'。自動再接続を試みます。';});
+  function presenceState(){
+    return {g:{r:round,ch:myCh,z:cfg.size,k:cfg.kill?1:0,s:skillSettingCode(),f:firstChoice,
+      h:isHost?1:0,rd:ready?1:0,go:startRequested?1:0,cv:cancelVersion,qv:quitVersion,
+      phase:netOn?'playing':(over?'ended':'lobby'),turn:turn,seed:networkSeed>>>0}};
+  }
+  function flushPresence(){
+    pubTimer=0;
+    if(!room||!pubPending)return;
+    var item=pubPending;pubPending=null;
+    if(item.sig===lastPub)return;
+    lastPub=item.sig;
+    room.presence(item.data).then(function(){},function(err){
+      lastPub='';
+      var n=document.getElementById('netmsg');
+      if(n)n.textContent='接続状態の更新に失敗：'+(err&&err.message?err.message:'通信を確認してください');
+    });
+  }
+  function pub(immediate){
+    if(!room)return;
+    var d=presenceState(),sig=JSON.stringify(d);
+    if(sig===lastPub&&!pubPending)return;
+    pubPending={data:d,sig:sig};
+    clearTimeout(pubTimer);
+    if(immediate)flushPresence();
+    else pubTimer=setTimeout(flushPresence,500);
+  }
+  function sendNetLog(force){
+    if(!room||!netOn)return Promise.resolve();
+    var key=round+'|'+myRole+'|'+lg;
+    if(!force&&key===lastGameBroadcast)return Promise.resolve();
+    lastGameBroadcast=key;
+    return room.broadcast({type:'log',r:round,role:myRole,log:lg}).then(function(result){
+      if(result==='error')throw new Error('Broadcast送信が拒否されました');
+      return result;
+    }).catch(function(err){
+      lastGameBroadcast='';
+      var n=document.getElementById('netmsg');
+      if(n)n.textContent='対局データ送信に失敗しました。通信を再同期してください。'+(err&&err.message?'（'+err.message+'）':'');
+    });
+  }
+  function requestGameSync(){
+    if(!room||!netOn||lastSyncRequestRound===round)return;
+    lastSyncRequestRound=round;
+    room.broadcast({type:'sync-request',r:round,role:myRole}).catch(function(){});
+  }
+  function drainRemoteLog(){
+    if(remoteProcessing||!netOn||!room)return;
+    if(applied>=remoteLog.length)return;
+    if(busy){clearTimeout(remoteDrainTimer);remoteDrainTimer=setTimeout(drainRemoteLog,80);return;}
+    if(turn!==opp(myRole)){clearTimeout(remoteDrainTimer);remoteDrainTimer=setTimeout(drainRemoteLog,100);return;}
+    var token=remoteLog.charAt(applied),skillMap={E:'erase',F:'flip',S:'swap',Z:'freeze',H:'shuffle',W:'blackhole'};
+    remoteProcessing=true;
+    try{
+      remote=true;
+      if(skillMap[token]){
+        useSkill(skillMap[token]);
+      }else{
+        var idx=parseInt(token,36);
+        if(!Number.isInteger(idx)||idx<0||idx>=N*N||!cellOk(idx)){
+          remote=false;remoteProcessing=false;
+          var n=document.getElementById('netmsg');
+          if(n)n.textContent='対局の手順が一致していません。通信を再同期してください。';
+          return;
+        }
+        handle(idx);
+      }
+      applied++;
+    }catch(err){
+      var n2=document.getElementById('netmsg');
+      if(n2)n2.textContent='相手の操作を反映できませんでした。通信を再同期してください。';
+    }finally{
+      remote=false;remoteProcessing=false;
+    }
+    if(applied<remoteLog.length){clearTimeout(remoteDrainTimer);remoteDrainTimer=setTimeout(drainRemoteLog,busy?80:0);}
+  }
+  function onGameBroadcast(evt){
+    var data=evt&&evt.payload&&typeof evt.payload==='object'?evt.payload:evt;
+    if(!data||cfg.mode!=='net'||!room)return;
+    if(data.type==='sync-request'&&data.r===round&&data.role===opp(myRole)){
+      sendNetLog(true);return;
+    }
+    if(data.type==='log'&&data.r===round&&data.role===opp(myRole)&&typeof data.log==='string'){
+      if(data.log.length>200)return;
+      if(data.log.length>=remoteLog.length){remoteLog=data.log;drainRemoteLog();}
+    }
   }
   function peerInfo(){
     if(!room)return null;var ps=room.peers(),me=null,o=null;
@@ -2271,7 +2359,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
       if(p.isMe){if(p.sameTab)me=p;}
       else if(p.kind==='viewer'&&p.presence&&p.presence.g&&!o)o=p;}
     if(!me||!o)return null;var g=o.presence.g;
-    if(typeof g.lg!=='string'||!/^[0-9a-oEFSZH]{0,200}$/.test(g.lg)||typeof g.r!=='number')return null;
+    if(!g||typeof g.r!=='number'||!CH[g.ch]||(g.h!==0&&g.h!==1))return null;
     return{me:me,o:o,g:g,mg:me.presence&&me.presence.g||{}};
   }
   function onNet(){
@@ -2349,50 +2437,52 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
         nm.textContent='キャラをえらんで「準備OK」を押してね（'+(myRole==='O'?'○・ホスト':'×・ゲスト')+'）';
       }
 
-      // A match begins only after each participant independently confirms.
-      // peerG.go is always the OTHER device's flag, regardless of host/guest role.
+      // The host is the single authority that commits the match epoch.
+      // Both players must request start, but the guest never starts from its
+      // local guess: it waits for the host's explicit phase='playing'.
       document.getElementById('bCancelStart').hidden=!(bothReady&&(startRequested||peerG.go===1));
-      if(bothReady&&startRequested&&peerG.go===1){
-        // Host publishes the next match epoch. Guest waits for that epoch so
-        // it cannot replay the previous match's move log during a rematch.
-        if(isHost){
-          round=round+1;
-        }else{
-          var hostRound=Number(hostG.r)||0;
-          if(hostRound<=round){
-            startBtn.hidden=true;
-            nm.textContent='ホストの試合開始確定を待っています…';
-          }else{
-            round=hostRound;
-          }
-        }
-        if(isHost||round===(Number(hostG.r)||0)){
-          netOn=true;
-          chars[myRole]=myCh;
-          chars[opp(myRole)]=peerG.ch;
-          if(!isHost){cfg.size=hostG.z;cfg.kill=!!hostG.k;cfg.skills=skillSettingFromCode(hostG.s);firstChoice=hostG.f;}
+      if(isHost&&bothReady&&startRequested&&peerG.go===1&&!netOn){
+        round=Math.max(round,Number(selfG.r)||0)+1;
+        networkSeed=(Date.now()^Math.floor(Math.random()*0xffffffff))>>>0;if(!networkSeed)networkSeed=1;
+        netOn=true;over=false;
+        chars[myRole]=myCh;chars[opp(myRole)]=peerG.ch;
+        first=(round%2===1?firstChoice:opp(firstChoice));
+        lg='';applied=0;remoteLog='';lastGameBroadcast='';lastSyncRequestRound=-1;
+        clearTimeout(remoteDrainTimer);setup();
+        startBtn.hidden=true;
+        document.getElementById('bCancelStart').hidden=true;
+        document.getElementById('bQuitMatch').hidden=false;
+        nm.textContent='対戦開始！';
+        noteEl.textContent=(first===myRole?'あなたが先攻':'相手が先攻')+'（'+(first==='O'?'○':'×')+'）';
+        pub(true);
+      }else if(!isHost&&bothReady&&startRequested&&peerG.go===1&&!netOn){
+        var hostRound=Number(hostG.r)||0;
+        if(hostG.phase==='playing'&&hostRound>round){
+          round=hostRound;networkSeed=(Number(hostG.seed)||1)>>>0;netOn=true;over=false;
+          chars[myRole]=myCh;chars[opp(myRole)]=peerG.ch;
+          cfg.size=hostG.z;cfg.kill=!!hostG.k;cfg.skills=skillSettingFromCode(hostG.s);firstChoice=hostG.f;
           first=(round%2===1?firstChoice:opp(firstChoice));
-          lg='';applied=0;lastPub='';setup();pub();
+          lg='';applied=0;remoteLog='';lastGameBroadcast='';lastSyncRequestRound=-1;
+          clearTimeout(remoteDrainTimer);setup();
           startBtn.hidden=true;
           document.getElementById('bCancelStart').hidden=true;
           document.getElementById('bQuitMatch').hidden=false;
           nm.textContent='対戦開始！';
-          noteEl.textContent=(first==='O'?'○':'×')+'が先手です';
+          noteEl.textContent=(first===myRole?'あなたが先攻':'相手が先攻')+'（'+(first==='O'?'○':'×')+'）';
+          pub(true);
+        }else{
+          startBtn.hidden=true;
+          nm.textContent='ホストの試合開始確定を待っています…';
         }
       }
     }
 
-    // Always replay the OTHER participant's log. On the guest device that is
-    // the host's log, not the guest's own presence data.
-    if(netOn&&peerG.r===round){
-      remote=true;
-      try{while(applied<peerG.lg.length){var c=peerG.lg.charAt(applied++);
-        if(c==='E'||c==='F'||c==='S'||c==='Z'||c==='H'||c==='W')useSkill({E:'erase',F:'flip',S:'swap',Z:'freeze',H:'shuffle',W:'blackhole'}[c]);else handle(parseInt(c,36));}}
-      finally{remote=false;}
-    }
+    // Gameplay moves use Broadcast, not Presence. Request the opponent's
+    // retained move log once after joining/rejoining a running match.
+    if(netOn&&peerG.r===round)requestGameSync();
   }
   function leaveNet(){
-    if(room){room.leave();room=null;}netOn=false;ready=false;startRequested=false;isHost=false;myRole='O';hostRules=null;lg='';applied=0;lastPub='';round=0;cancelVersion=0;quitVersion=0;lastPeerCancel=0;lastPeerQuit=0;
+    clearTimeout(pubTimer);pubPending=null;clearTimeout(remoteDrainTimer);if(room){room.leave();room=null;}netOn=false;ready=false;startRequested=false;isHost=false;myRole='O';hostRules=null;lg='';applied=0;remoteLog='';lastGameBroadcast='';lastPub='';round=0;cancelVersion=0;quitVersion=0;lastPeerCancel=0;lastPeerQuit=0;lastSyncRequestRound=-1;
     document.getElementById('bReady').hidden=true;document.getElementById('bReady').disabled=false;document.getElementById('bJoin').hidden=false;
     document.getElementById('bLeaveRoom').hidden=true;document.getElementById('bReconnect').hidden=true;
     document.getElementById('bQuitMatch').hidden=true;document.getElementById('bCancelStart').hidden=true;
@@ -2403,8 +2493,8 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
     var nm=document.getElementById('netmsg');
     if(!/^[a-z0-9][a-z0-9_.-]{0,19}$/.test(code)){nm.textContent='合言葉は英数字で入れてください。';return;}
     if(!lobby){nm.textContent='通信ライブラリ未初期化。ページを再読み込みしてください。';return;}
-    if(room){try{room.leave();}catch(e){} room=null;}
-    netOn=false;ready=false;startRequested=false;isHost=(mode==='host');myRole=isHost?'O':'X';hostRules=null;lg='';applied=0;lastPub='';round=0;cancelVersion=0;quitVersion=0;lastPeerCancel=0;lastPeerQuit=0;
+    clearTimeout(pubTimer);pubPending=null;clearTimeout(remoteDrainTimer);if(room){try{room.leave();}catch(e){} room=null;}
+    netOn=false;ready=false;startRequested=false;isHost=(mode==='host');myRole=isHost?'O':'X';hostRules=null;lg='';applied=0;remoteLog='';lastGameBroadcast='';lastPub='';round=0;cancelVersion=0;quitVersion=0;lastPeerCancel=0;lastPeerQuit=0;lastSyncRequestRound=-1;
     document.getElementById('bReady').hidden=true;
     document.getElementById('bReady').disabled=false;document.getElementById('startMatch').hidden=true;
     document.getElementById('bJoin').hidden=false;
@@ -2412,18 +2502,22 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
     lobby.join('mt-'+code,function(st,detail){
       if(st==='SUBSCRIBED')nm.textContent=(mode==='host'?'ホストルーム作成OK。相手を待っています…':'ルーム接続OK。ホストを確認中…');
       else if(st==='再接続中（CLOSED）'||st==='再接続中（CHANNEL_ERROR）'||st==='再接続中（TIMED_OUT）')nm.textContent='通信が切れたため自動再接続中…（対局データは保持しています）';
-      else if(st==='再接続完了')nm.textContent='通信再接続OK。対局を同期しています…';
+      else if(st==='再接続完了'){
+        nm.textContent='通信再接続OK。対局ログを再同期しています…';
+        lastGameBroadcast='';lastSyncRequestRound=-1;
+        setTimeout(function(){if(room&&netOn){sendNetLog(true);requestGameSync();}},250);
+      }
       else if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'||st==='CLOSED')nm.textContent='通信エラー：'+st+(detail?' / '+String(detail.message||detail):'');
       else nm.textContent='通信状態：'+st;
     }).then(function(r){
-      room=r;round=0;lg='';applied=0;netOn=false;ready=false;lastPub='';
-      r.onPeers(onNet);
+      room=r;round=0;lg='';applied=0;remoteLog='';lastGameBroadcast='';lastSyncRequestRound=-1;netOn=false;ready=false;lastPub='';
+      r.onPeers(onNet);r.onBroadcast(onGameBroadcast);
       document.getElementById('bReady').hidden=false;
       document.getElementById('bJoin').hidden=true;
       document.getElementById('bLeaveRoom').hidden=false;
       document.getElementById('bReconnect').hidden=false;
       nm.textContent=(mode==='host'?'ホストルーム作成完了！合言葉「'+code+'」で相手を待っています。':'ルーム参加完了！ホストと接続しています…');
-      pub();setTimeout(onNet,300);
+      pub(true);setTimeout(onNet,300);
     },function(err){
       room=null;
       nm.textContent='接続失敗：'+(err&&err.message?err.message:String(err||'原因不明'))+'。SupabaseのRealtime設定・通信環境を確認してください。';
@@ -2438,7 +2532,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
     var code=document.getElementById('code').value.trim().toLowerCase();
     connectToRoom(code,'guest');
   });
-  document.getElementById('bReady').addEventListener('click',function(){ready=true;this.disabled=true;pub();onNet();});
+  document.getElementById('bReady').addEventListener('click',function(){ready=true;this.disabled=true;pub(true);onNet();});
   document.getElementById('bLeaveRoom').addEventListener('click',function(){
     if(confirm('通信ルームから退出しますか？'))leaveNet();
   });
@@ -2448,7 +2542,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
     document.getElementById('bReady').disabled=false;
     document.getElementById('bReady').hidden=false;
     document.getElementById('startMatch').hidden=true;
-    this.hidden=true;pub();onNet();
+    this.hidden=true;pub(true);onNet();
     document.getElementById('netmsg').textContent='試合開始をキャンセルしました。キャラを選び直して準備OKを押してください。';
   });
   document.getElementById('bQuitMatch').addEventListener('click',function(){
@@ -2459,14 +2553,22 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
     document.getElementById('bReady').hidden=false;
     document.getElementById('bReady').disabled=false;
     document.getElementById('startMatch').hidden=true;
-    setup();pub();onNet();
+    setup();pub(true);onNet();
     document.getElementById('netmsg').textContent='試合を終了しました。キャラ選択から再戦できます。';
   });
   document.getElementById('bReconnect').addEventListener('click',function(){
     if(!room){document.getElementById('netmsg').textContent='ルームに接続していません。合言葉で再参加してください。';return;}
-    lastPub='';pub();
-    try{onNet();}catch(e){}
-    document.getElementById('netmsg').textContent='通信状態を確認し、現在の相手情報を再同期しました。接続が切れている場合は自動再接続を待ってください。';
+    var btn=this;btn.disabled=true;
+    document.getElementById('netmsg').textContent='通信チャンネルをつなぎ直しています…';
+    room.reconnect().then(function(){
+      lastPub='';lastGameBroadcast='';lastSyncRequestRound=-1;
+      pub(true);
+      try{onNet();}catch(e){}
+      if(netOn)requestGameSync();
+      document.getElementById('netmsg').textContent='再接続しました。相手の対局ログを確認しています…';
+    }).catch(function(err){
+      document.getElementById('netmsg').textContent='再接続できませんでした。部屋から退出して、同じ合言葉で再参加してください。'+(err&&err.message?'（'+err.message+'）':'');
+    }).finally(function(){btn.disabled=false;});
   });
   // Supabase Realtime adapter: keep the existing game UI/turn log, replace the old hosted-room dependency.
   var SUPABASE_URL='https://bccvjjtsiogmtankberh.supabase.co';
@@ -2479,26 +2581,48 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
       join:function(topic,onStatus){
         return new Promise(function(resolve,reject){
           if(!sbClient){reject(new Error('Supabase SDKを読み込めませんでした'));return;}
-          var callbacks=[],currentChannel=null,settled=false,closedByUser=false,retryTimer=0,retryDelay=1200;
-          var latestData=null,trackQueue=Promise.resolve(),initialTimeout=0;
+          var callbacks=[],broadcastCallbacks=[],currentChannel=null,settled=false,closedByUser=false,retryTimer=0,retryDelay=1200;
+          var latestData=null,trackQueue=Promise.resolve(),broadcastQueue=Promise.resolve(),initialTimeout=0,reconnectWaiters=[];
           function notify(){callbacks.slice().forEach(function(fn){try{fn();}catch(e){}});}
           function status(st,err){if(typeof onStatus==='function')try{onStatus(st,err);}catch(e){}}
+          function notifyBroadcast(evt){broadcastCallbacks.slice().forEach(function(fn){try{fn(evt);}catch(e){}});}
           function attach(ch){
             ch.on('presence',{event:'sync'},notify);
             ch.on('presence',{event:'join'},notify);
             ch.on('presence',{event:'leave'},notify);
+            ch.on('broadcast',{event:'game'},notifyBroadcast);
           }
           function sendLatest(){
             if(!currentChannel||!latestData)return Promise.resolve();
-            var ch=currentChannel, payload={g:latestData.g,peer:sbPeerOrder,kind:'viewer',client:sbClientId};
+            var ch=currentChannel;
             trackQueue=trackQueue.catch(function(){}).then(function(){
-              if(closedByUser||ch!==currentChannel)return;
+              if(closedByUser||ch!==currentChannel||!latestData)return;
+              var payload={g:latestData.g,peer:sbPeerOrder,kind:'viewer',client:sbClientId};
               return ch.track(payload);
             });
             return trackQueue;
           }
           var adapter={
             onPeers:function(fn){callbacks.push(fn);notify();},
+            onBroadcast:function(fn){broadcastCallbacks.push(fn);},
+            broadcast:function(data){
+              broadcastQueue=broadcastQueue.catch(function(){}).then(function(){
+                if(closedByUser||!currentChannel)throw new Error('通信チャンネルが接続されていません');
+                return currentChannel.send({type:'broadcast',event:'game',payload:data});
+              });
+              return broadcastQueue;
+            },
+            reconnect:function(){
+              if(closedByUser)return Promise.reject(new Error('この部屋は退出済みです'));
+              return new Promise(function(resolve,reject){
+                var done=false,waiter=null,t=setTimeout(function(){if(done)return;done=true;reconnectWaiters=reconnectWaiters.filter(function(w){return w!==waiter;});reject(new Error('再接続がタイムアウトしました'));},15000);
+                waiter={resolve:function(){if(done)return;done=true;clearTimeout(t);resolve();},reject:reject};
+                reconnectWaiters.push(waiter);
+                clearTimeout(retryTimer);var old=currentChannel;currentChannel=null;
+                if(old){try{sbClient.removeChannel(old);}catch(e){}}
+                openChannel(false);
+              });
+            },
             presence:function(data){latestData=data;return sendLatest();},
             peers:function(){
               var state=currentChannel?currentChannel.presenceState():{},out=[];
@@ -2511,17 +2635,23 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
           };
           function openChannel(isInitial){
             if(closedByUser)return;
-            var ch=sbClient.channel(topic,{config:{presence:{key:sbClientId}}});
+            var ch=sbClient.channel(topic,{config:{presence:{key:sbClientId},broadcast:{ack:true,self:false}}});
             currentChannel=ch;attach(ch);
             ch.subscribe(function(st,err){
               if(closedByUser||ch!==currentChannel)return;
               if(st==='SUBSCRIBED'){
                 retryDelay=1200;status(isInitial?'SUBSCRIBED':'再接続完了',null);
                 if(!settled){settled=true;clearTimeout(initialTimeout);resolve(adapter);}
+                reconnectWaiters.slice().forEach(function(w){w.resolve();});reconnectWaiters=[];
                 if(latestData)sendLatest().then(notify).catch(function(e){status('送信再試行待ち',e);});
                 notify();
               }else if(st==='CLOSED'||st==='CHANNEL_ERROR'||st==='TIMED_OUT'){
                 status(settled?'再接続中（'+st+'）':st,err);
+                var errText=String(err&&((err.message||err.reason)||err)||'');
+                if(/presence|rate limit|too many/i.test(errText)){
+                  status('通信更新が多すぎるため、少し待って再接続します',err);
+                  retryDelay=Math.max(retryDelay,5000);
+                }
                 if(!settled){settled=true;clearTimeout(initialTimeout);reject(err||new Error(st));return;}
                 currentChannel=null;
                 try{sbClient.removeChannel(ch);}catch(e){}
