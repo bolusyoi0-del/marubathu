@@ -682,7 +682,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
     <button class="chip" data-k="skills" data-v="2" aria-pressed="false">2回</button>
     <button class="chip" data-k="skills" data-v="inf" aria-pressed="false">∞</button>
   </div>
-  <div id="netbox" hidden><div class="opts"><input id="code" maxlength="20" placeholder="合言葉(英数字)" autocapitalize="off" autocomplete="off"><button class="nbtn" id="bMk" type="button">つくる</button><button class="nbtn" id="bJoin" type="button">参加</button><button class="nbtn" id="bReady" type="button" hidden>準備OK</button><button class="nbtn" id="bCancelStart" type="button" hidden>開始キャンセル</button><button class="nbtn" id="bReconnect" type="button" hidden>通信を再同期</button><button class="nbtn" id="bQuitMatch" type="button" hidden>試合をやめる</button><button class="nbtn" id="bLeaveRoom" type="button" hidden>部屋から退出</button></div><div class="nm" id="netmsg">同じ合言葉を入れた2人で対戦できます。相手にも同じリンクを開いてもらってね。</div></div>
+  <div id="netbox" hidden><div class="opts"><input id="code" maxlength="20" placeholder="合言葉(英数字)" autocapitalize="off" autocomplete="off"><button class="nbtn" id="bMk" type="button">つくる</button><button class="nbtn" id="bJoin" type="button">参加</button><button class="nbtn" id="bReady" type="button" hidden>準備OK</button><button class="nbtn" id="bCancelStart" type="button" hidden>開始キャンセル</button><button class="nbtn" id="bQuitMatch" type="button" hidden>試合をやめる</button><button class="nbtn" id="bLeaveRoom" type="button" hidden>部屋から退出</button></div><div class="nm" id="netmsg">同じ合言葉を入れた2人で対戦できます。相手にも同じリンクを開いてもらってね。</div></div>
   <div id="pick"></div>
   <div id="rule"></div>
   <div id="status" role="status" aria-live="polite"></div>
@@ -751,6 +751,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
   var lobby=null,room=null,myRole='O',myCh='mika',round=0,lg='',applied=0,remote=false,netOn=false,ready=false,lastPub='',isHost=false,startRequested=false,hostRules=null;
   var cancelVersion=0,quitVersion=0,lastPeerCancel=0,lastPeerQuit=0;
   var pubTimer=0,pubPending=null,remoteLog='',lastGameBroadcast='',lastSyncRequestRound=-1,remoteDrainTimer=0,remoteProcessing=false,networkSeed=1;
+  var peerRealtimeState=null,presenceTracked=false,trackRetryTimer=0,trackRetryDelay=1200,roomCleanupPromise=Promise.resolve(),netNotifyTimer=0;
   function local(p){return cfg.mode==='net'?p===myRole:cfg.mode==='two'?true:p===humanMark;}
   function gameRandom(){
     if(cfg.mode!=='net'||!netOn)return Math.random();
@@ -2272,26 +2273,59 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
       h:isHost?1:0,rd:ready?1:0,go:startRequested?1:0,cv:cancelVersion,qv:quitVersion,
       phase:netOn?'playing':(over?'ended':'lobby'),turn:turn,seed:networkSeed>>>0}};
   }
+  function sendStateBroadcast(g){
+    if(!room)return Promise.resolve('not-connected');
+    return room.broadcast({type:'state',g:g}).then(function(result){
+      if(result!=='ok')throw new Error('状態通知: '+result);
+      return result;
+    }).catch(function(err){
+      var n=document.getElementById('netmsg');
+      if(n)n.textContent='キャラ・準備状態の送信に失敗しました。接続を確認してください。'+(err&&err.message?'（'+err.message+'）':'');
+      return 'error';
+    });
+  }
   function flushPresence(){
     pubTimer=0;
     if(!room||!pubPending)return;
     var item=pubPending;pubPending=null;
     if(item.sig===lastPub)return;
-    lastPub=item.sig;
-    room.presence(item.data).then(function(){},function(err){
-      lastPub='';
+    room.presence(item.data,true).then(function(result){
+      if(result==='ok'){
+        lastPub=item.sig;presenceTracked=true;trackRetryDelay=1200;
+        return;
+      }
+      pubPending=item;
       var n=document.getElementById('netmsg');
-      if(n)n.textContent='接続状態の更新に失敗：'+(err&&err.message?err.message:'通信を確認してください');
+      if(n)n.textContent='入室情報の送信が保留されました（'+String(result)+'）。時間をおいて再試行します。';
+      clearTimeout(trackRetryTimer);
+      trackRetryTimer=setTimeout(function(){if(pubPending)flushPresence();},trackRetryDelay);
+      trackRetryDelay=Math.min(trackRetryDelay*2,15000);
+    }).catch(function(err){
+      pubPending=item;
+      var n=document.getElementById('netmsg');
+      if(n)n.textContent='入室情報の送信に失敗しました。再試行します。'+(err&&err.message?'（'+err.message+'）':'');
+      clearTimeout(trackRetryTimer);
+      trackRetryTimer=setTimeout(function(){if(pubPending)flushPresence();},trackRetryDelay);
+      trackRetryDelay=Math.min(trackRetryDelay*2,15000);
     });
   }
   function pub(immediate){
     if(!room)return;
     var d=presenceState(),sig=JSON.stringify(d);
-    if(sig===lastPub&&!pubPending)return;
-    pubPending={data:d,sig:sig};
-    clearTimeout(pubTimer);
-    if(immediate)flushPresence();
-    else pubTimer=setTimeout(flushPresence,500);
+    // Keep the latest payload for a real reconnect, but do not call track() for every tap.
+    room.presence(d,false);
+    sendStateBroadcast(d.g);
+    if(!presenceTracked){
+      if(sig===lastPub&&!pubPending)return;
+      pubPending={data:d,sig:sig};
+      clearTimeout(pubTimer);
+      if(immediate)flushPresence();
+      else pubTimer=setTimeout(flushPresence,0);
+    }
+  }
+  function scheduleNetNotify(){
+    if(netNotifyTimer)return;
+    netNotifyTimer=setTimeout(function(){netNotifyTimer=0;onNet();},0);
   }
   function sendNetLog(force){
     if(!room||!netOn)return Promise.resolve();
@@ -2299,7 +2333,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
     if(!force&&key===lastGameBroadcast)return Promise.resolve();
     lastGameBroadcast=key;
     return room.broadcast({type:'log',r:round,role:myRole,log:lg}).then(function(result){
-      if(result==='error')throw new Error('Broadcast送信が拒否されました');
+      if(result!=='ok')throw new Error('Broadcast送信結果: '+String(result));
       return result;
     }).catch(function(err){
       lastGameBroadcast='';
@@ -2345,6 +2379,11 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
   function onGameBroadcast(evt){
     var data=evt&&evt.payload&&typeof evt.payload==='object'?evt.payload:evt;
     if(!data||cfg.mode!=='net'||!room)return;
+    if(data.type==='state'&&data.g&&typeof data.g==='object'){
+      peerRealtimeState=data.g;
+      scheduleNetNotify();
+      return;
+    }
     if(data.type==='sync-request'&&data.r===round&&data.role===opp(myRole)){
       sendNetLog(true);return;
     }
@@ -2368,7 +2407,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
 
     // Keep the two participants separate from the host/guest roles:
     // I.mg is ALWAYS this device; I.g is ALWAYS the other device.
-    var selfG=I.mg||{},peerG=I.g||{};
+    var selfG=I.mg||{},peerG=Object.assign({},I.g||{},peerRealtimeState||{});
     isHost=selfG.h===1?true:(peerG.h===1?false:I.me.peer<I.o.peer);
     myRole=isHost?'O':'X';
 
@@ -2482,9 +2521,10 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
     if(netOn&&peerG.r===round)requestGameSync();
   }
   function leaveNet(){
-    clearTimeout(pubTimer);pubPending=null;clearTimeout(remoteDrainTimer);if(room){room.leave();room=null;}netOn=false;ready=false;startRequested=false;isHost=false;myRole='O';hostRules=null;lg='';applied=0;remoteLog='';lastGameBroadcast='';lastPub='';round=0;cancelVersion=0;quitVersion=0;lastPeerCancel=0;lastPeerQuit=0;lastSyncRequestRound=-1;
+    clearTimeout(pubTimer);clearTimeout(trackRetryTimer);pubPending=null;clearTimeout(remoteDrainTimer);peerRealtimeState=null;presenceTracked=false;
+    if(room){var oldRoom=room;room=null;roomCleanupPromise=Promise.resolve(oldRoom.leave()).catch(function(){});}netOn=false;ready=false;startRequested=false;isHost=false;myRole='O';hostRules=null;lg='';applied=0;remoteLog='';lastGameBroadcast='';lastPub='';round=0;cancelVersion=0;quitVersion=0;lastPeerCancel=0;lastPeerQuit=0;lastSyncRequestRound=-1;
     document.getElementById('bReady').hidden=true;document.getElementById('bReady').disabled=false;document.getElementById('bJoin').hidden=false;
-    document.getElementById('bLeaveRoom').hidden=true;document.getElementById('bReconnect').hidden=true;
+    document.getElementById('bLeaveRoom').hidden=true;
     document.getElementById('bQuitMatch').hidden=true;document.getElementById('bCancelStart').hidden=true;
     document.getElementById('startMatch').hidden=true;
     document.getElementById('netmsg').textContent='同じ合言葉を入れた2人で対戦できます。相手にも同じリンクを開いてもらってね。';
@@ -2493,13 +2533,14 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
     var nm=document.getElementById('netmsg');
     if(!/^[a-z0-9][a-z0-9_.-]{0,19}$/.test(code)){nm.textContent='合言葉は英数字で入れてください。';return;}
     if(!lobby){nm.textContent='通信ライブラリ未初期化。ページを再読み込みしてください。';return;}
-    clearTimeout(pubTimer);pubPending=null;clearTimeout(remoteDrainTimer);if(room){try{room.leave();}catch(e){} room=null;}
+    clearTimeout(pubTimer);clearTimeout(trackRetryTimer);pubPending=null;clearTimeout(remoteDrainTimer);peerRealtimeState=null;presenceTracked=false;
+    if(room){var oldRoom=room;room=null;roomCleanupPromise=Promise.resolve(oldRoom.leave()).catch(function(){});}
     netOn=false;ready=false;startRequested=false;isHost=(mode==='host');myRole=isHost?'O':'X';hostRules=null;lg='';applied=0;remoteLog='';lastGameBroadcast='';lastPub='';round=0;cancelVersion=0;quitVersion=0;lastPeerCancel=0;lastPeerQuit=0;lastSyncRequestRound=-1;
     document.getElementById('bReady').hidden=true;
     document.getElementById('bReady').disabled=false;document.getElementById('startMatch').hidden=true;
     document.getElementById('bJoin').hidden=false;
     nm.textContent=(mode==='host'?'ホストルームを作成して接続中…':'ルームに参加中…');
-    lobby.join('mt-'+code,function(st,detail){
+    roomCleanupPromise.then(function(){return lobby.join('mt-'+code,function(st,detail){
       if(st==='SUBSCRIBED')nm.textContent=(mode==='host'?'ホストルーム作成OK。相手を待っています…':'ルーム接続OK。ホストを確認中…');
       else if(st==='再接続中（CLOSED）'||st==='再接続中（CHANNEL_ERROR）'||st==='再接続中（TIMED_OUT）')nm.textContent='通信が切れたため自動再接続中…（対局データは保持しています）';
       else if(st==='再接続完了'){
@@ -2509,13 +2550,13 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
       }
       else if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'||st==='CLOSED')nm.textContent='通信エラー：'+st+(detail?' / '+String(detail.message||detail):'');
       else nm.textContent='通信状態：'+st;
-    }).then(function(r){
-      room=r;round=0;lg='';applied=0;remoteLog='';lastGameBroadcast='';lastSyncRequestRound=-1;netOn=false;ready=false;lastPub='';
+    });}).then(function(r){
+      room=r;round=0;lg='';applied=0;remoteLog='';lastGameBroadcast='';lastSyncRequestRound=-1;netOn=false;ready=false;lastPub='';peerRealtimeState=null;presenceTracked=false;
       r.onPeers(onNet);r.onBroadcast(onGameBroadcast);
       document.getElementById('bReady').hidden=false;
       document.getElementById('bJoin').hidden=true;
       document.getElementById('bLeaveRoom').hidden=false;
-      document.getElementById('bReconnect').hidden=false;
+      
       nm.textContent=(mode==='host'?'ホストルーム作成完了！合言葉「'+code+'」で相手を待っています。':'ルーム参加完了！ホストと接続しています…');
       pub(true);setTimeout(onNet,300);
     },function(err){
@@ -2556,20 +2597,6 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
     setup();pub(true);onNet();
     document.getElementById('netmsg').textContent='試合を終了しました。キャラ選択から再戦できます。';
   });
-  document.getElementById('bReconnect').addEventListener('click',function(){
-    if(!room){document.getElementById('netmsg').textContent='ルームに接続していません。合言葉で再参加してください。';return;}
-    var btn=this;btn.disabled=true;
-    document.getElementById('netmsg').textContent='通信チャンネルをつなぎ直しています…';
-    room.reconnect().then(function(){
-      lastPub='';lastGameBroadcast='';lastSyncRequestRound=-1;
-      pub(true);
-      try{onNet();}catch(e){}
-      if(netOn)requestGameSync();
-      document.getElementById('netmsg').textContent='再接続しました。相手の対局ログを確認しています…';
-    }).catch(function(err){
-      document.getElementById('netmsg').textContent='再接続できませんでした。部屋から退出して、同じ合言葉で再参加してください。'+(err&&err.message?'（'+err.message+'）':'');
-    }).finally(function(){btn.disabled=false;});
-  });
   // Supabase Realtime adapter: keep the existing game UI/turn log, replace the old hosted-room dependency.
   var SUPABASE_URL='https://bccvjjtsiogmtankberh.supabase.co';
   var SUPABASE_PUBLISHABLE_KEY='sb_publishable_bvlWUjr7baA-RoblQRgMyQ_X3Lp_VmQ';
@@ -2583,7 +2610,8 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
           if(!sbClient){reject(new Error('Supabase SDKを読み込めませんでした'));return;}
           var callbacks=[],broadcastCallbacks=[],currentChannel=null,settled=false,closedByUser=false,retryTimer=0,retryDelay=1200;
           var latestData=null,trackQueue=Promise.resolve(),broadcastQueue=Promise.resolve(),initialTimeout=0,reconnectWaiters=[];
-          function notify(){callbacks.slice().forEach(function(fn){try{fn();}catch(e){}});}
+          var notifyTimer=0;
+          function notify(){if(notifyTimer)return;notifyTimer=setTimeout(function(){notifyTimer=0;callbacks.slice().forEach(function(fn){try{fn();}catch(e){}});},0);}
           function status(st,err){if(typeof onStatus==='function')try{onStatus(st,err);}catch(e){}}
           function notifyBroadcast(evt){broadcastCallbacks.slice().forEach(function(fn){try{fn(evt);}catch(e){}});}
           function attach(ch){
@@ -2598,7 +2626,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
             trackQueue=trackQueue.catch(function(){}).then(function(){
               if(closedByUser||ch!==currentChannel||!latestData)return;
               var payload={g:latestData.g,peer:sbPeerOrder,kind:'viewer',client:sbClientId};
-              return ch.track(payload);
+              return ch.track(payload).then(function(result){if(result!=='ok')throw new Error('Presence track returned '+String(result));return result;});
             });
             return trackQueue;
           }
@@ -2608,22 +2636,11 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
             broadcast:function(data){
               broadcastQueue=broadcastQueue.catch(function(){}).then(function(){
                 if(closedByUser||!currentChannel)throw new Error('通信チャンネルが接続されていません');
-                return currentChannel.send({type:'broadcast',event:'game',payload:data});
+                return currentChannel.send({type:'broadcast',event:'game',payload:data}).then(function(result){if(result!=='ok')throw new Error('Broadcast send returned '+String(result));return result;});
               });
               return broadcastQueue;
             },
-            reconnect:function(){
-              if(closedByUser)return Promise.reject(new Error('この部屋は退出済みです'));
-              return new Promise(function(resolve,reject){
-                var done=false,waiter=null,t=setTimeout(function(){if(done)return;done=true;reconnectWaiters=reconnectWaiters.filter(function(w){return w!==waiter;});reject(new Error('再接続がタイムアウトしました'));},15000);
-                waiter={resolve:function(){if(done)return;done=true;clearTimeout(t);resolve();},reject:reject};
-                reconnectWaiters.push(waiter);
-                clearTimeout(retryTimer);var old=currentChannel;currentChannel=null;
-                if(old){try{sbClient.removeChannel(old);}catch(e){}}
-                openChannel(false);
-              });
-            },
-            presence:function(data){latestData=data;return sendLatest();},
+            presence:function(data,trackNow){latestData=data;if(trackNow===false)return Promise.resolve('stored');return sendLatest();},
             peers:function(){
               var state=currentChannel?currentChannel.presenceState():{},out=[];
               Object.keys(state||{}).forEach(function(key){(state[key]||[]).forEach(function(meta){
@@ -2631,7 +2648,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
                 out.push({isMe:isSelf,sameTab:isSelf,peer:Number(meta.peer)||0,kind:meta.kind||'viewer',presence:{g:meta.g}});
               });});return out;
             },
-            leave:function(){closedByUser=true;clearTimeout(retryTimer);clearTimeout(initialTimeout);var ch=currentChannel;currentChannel=null;if(ch){try{sbClient.removeChannel(ch);}catch(e){}}}
+            leave:function(){closedByUser=true;clearTimeout(retryTimer);clearTimeout(initialTimeout);var ch=currentChannel;currentChannel=null;if(ch){try{return Promise.resolve(sbClient.removeChannel(ch));}catch(e){return Promise.resolve();}}return Promise.resolve();}
           };
           function openChannel(isInitial){
             if(closedByUser)return;
@@ -2674,7 +2691,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
     try{sbClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);lobby=makeSupabaseRoomAdapter();}
     catch(e){var nm=document.getElementById('netmsg');if(nm)nm.textContent='通信設定を初期化できませんでした。';}
   }
-  ['bCancelStart','bReconnect','bQuitMatch','bLeaveRoom'].forEach(function(id){var el=document.getElementById(id);if(el)el.hidden=true;});
+  ['bCancelStart','bQuitMatch','bLeaveRoom'].forEach(function(id){var el=document.getElementById(id);if(el)el.hidden=true;});
   initSupabaseRoom();
   applySoundSetting();
   setup();
