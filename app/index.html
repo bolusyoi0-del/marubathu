@@ -1468,7 +1468,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
     });}
     var pk='';
     ['O','X'].forEach(function(p){
-      var fixed=(cfg.mode==='net'&&netOn);
+      var fixed=(cfg.mode==='net'&&(netOn||p!==myRole));
       pk+='<div class="pickrow"><span>'+names()[p]+'のキャラ'+(isCpu(p)?(cfg.mode==='net'?'':'(選択済み)'):'')+'</span><div class="cards">';
       IDS.forEach(function(id){var c=CH[id];
         pk+='<button type="button" class="card" data-p="'+p+'" data-c="'+id+'"'+(fixed?' disabled':'')+
@@ -1509,7 +1509,15 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
   pickEl.addEventListener('click',function(e){
     var b=e.target.closest('button');if(!b||b.disabled)return;
     var p=b.getAttribute('data-p'),c=b.getAttribute('data-c');
-    if(cfg.mode==='net'){if(p!==myRole||netOn)return;myCh=c;chars[p]=c;render();pub();return;}
+    if(cfg.mode==='net'){
+      if(p!==myRole||netOn||!CH[c]||myCh===c)return;
+      myCh=c;chars[myRole]=myCh;
+      ready=false;startRequested=false;cancelVersion++;
+      document.getElementById('bReady').disabled=false;
+      document.getElementById('startMatch').hidden=true;
+      document.getElementById('bCancelStart').hidden=true;
+      lastPub='';render();pub();onNet();return;
+    }
     if(chars[p]===c)return;
     // Allow both sides to select the same character.
     chars[p]=c;
@@ -2114,8 +2122,11 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
   document.getElementById('startMatch').addEventListener('click',function(){
     if(cfg.mode==='net'&&room&&!netOn){
       var I=peerInfo();if(!I)return;
-      var hg=(I.me.peer<I.o.peer)?I.mg:I.g,og=(I.me.peer<I.o.peer)?I.g:I.mg;
-      if(!ready||!hg||hg.rd!==1||!og||og.rd!==1)return;
+      var peerG=I.g||{};
+      if(!ready||peerG.rd!==1||!CH[myCh]||!CH[peerG.ch]||chars[myRole]!==myCh||chars[opp(myRole)]!==peerG.ch){
+        document.getElementById('netmsg').textContent='キャラクター情報または準備状態が未同期です。相手のキャラ表示を確認してから試合開始してください。';
+        this.hidden=true;return;
+      }
       startRequested=true;this.hidden=true;pub();onNet();return;
     }
     if(!(cfg.mode==='strong'||cfg.mode==='weak'||cfg.mode==='two'||cfg.mode==='watch'))return;
@@ -2251,7 +2262,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
   function skipFx(){clearTimeout(fxT);TR=null;P=[];winShow=true;fxLock=false;document.getElementById('stage').classList.remove('lock');render();}
   document.getElementById('stage').addEventListener('click',function(){if(fxLock&&performance.now()-fxAt>400)skipFx();});
   function pub(){
-    if(!room)return;var d={g:{r:round,ch:chars[myRole],z:cfg.size,k:cfg.kill?1:0,s:skillSettingCode(),f:firstChoice,h:isHost?1:0,rd:ready?1:0,go:startRequested?1:0,cv:cancelVersion,qv:quitVersion,lg:lg,end:over?1:0}},j=JSON.stringify(d);
+    if(!room)return;var d={g:{r:round,ch:myCh,z:cfg.size,k:cfg.kill?1:0,s:skillSettingCode(),f:firstChoice,h:isHost?1:0,rd:ready?1:0,go:startRequested?1:0,cv:cancelVersion,qv:quitVersion,lg:lg,end:over?1:0}},j=JSON.stringify(d);
     if(j===lastPub)return;lastPub=j;room.presence(d).then(function(){},function(err){lastPub='';var n=document.getElementById('netmsg');if(n)n.textContent='通信データ送信エラー：'+(err&&err.message?err.message:'接続を確認してください')+'。自動再接続を試みます。';});
   }
   function peerInfo(){
@@ -2266,38 +2277,51 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
   function onNet(){
     var I=peerInfo(),nm=document.getElementById('netmsg'),startBtn=document.getElementById('startMatch');
     if(!I){if(room)nm.textContent='相手を待っています…(同じ合言葉を入れてもらってね)';return;}
-    // The earliest participant is the room host on BOTH devices; host always owns O.
-    isHost=I.mg.h===1?true:(I.g.h===1?false:I.me.peer<I.o.peer);
+
+    // Keep the two participants separate from the host/guest roles:
+    // I.mg is ALWAYS this device; I.g is ALWAYS the other device.
+    var selfG=I.mg||{},peerG=I.g||{};
+    isHost=selfG.h===1?true:(peerG.h===1?false:I.me.peer<I.o.peer);
     myRole=isHost?'O':'X';
-    var hg=isHost?I.mg:I.g,og=isHost?I.g:I.mg;
-    if(!hg||typeof hg.z!=='number')return;
-    var peerCv=Number(og.cv)||0,peerQv=Number(og.qv)||0;
+
+    // Host/guest data is used only for host-owned settings. Peer data is used
+    // for all remote character, readiness, start, quit, cancel and move-log state.
+    var hostG=isHost?selfG:peerG;
+    var guestG=isHost?peerG:selfG;
+    if(!hostG||typeof hostG.z!=='number')return;
+
+    var peerCv=Number(peerG.cv)||0,peerQv=Number(peerG.qv)||0;
     if(peerCv!==lastPeerCancel){
       lastPeerCancel=peerCv;ready=false;startRequested=false;
+      document.getElementById('bReady').hidden=false;
       document.getElementById('bReady').disabled=false;
-      document.getElementById('startMatch').hidden=true;
+      startBtn.hidden=true;
       document.getElementById('bCancelStart').hidden=true;
-      nm.textContent='相手が開始をキャンセルしました。キャラを選び直して、もう一度準備OKを押してください。';
+      nm.textContent='相手のキャラ選択または開始状態が変更されました。もう一度準備OKを押してください。';
       pub();
     }
     if(peerQv!==lastPeerQuit){
       lastPeerQuit=peerQv;netOn=false;ready=false;startRequested=false;over=false;
       document.getElementById('bReady').disabled=false;
       document.getElementById('bReady').hidden=false;
-      document.getElementById('startMatch').hidden=true;
+      startBtn.hidden=true;
       document.getElementById('bQuitMatch').hidden=true;
       document.getElementById('bCancelStart').hidden=true;
       nm.textContent='相手が試合を終了しました。キャラ選択から再戦できます。';
       setup();pub();
     }
+
     if(!netOn){
+      // Build the same O/X -> character mapping on BOTH devices.
+      if(!CH[myCh])myCh='mika';
       chars[myRole]=myCh;
-      if(CH[og.ch])chars[opp(myRole)]=og.ch;
-      // Host settings are authoritative. Guests mirror them before ready/start.
+      if(CH[peerG.ch])chars[opp(myRole)]=peerG.ch;
+
+      // Host owns the shared board/rule settings; the guest mirrors them.
       if(!isHost){
-        if(hg.z===3||hg.z===5)cfg.size=hg.z;
-        cfg.kill=!!hg.k;cfg.skills=skillSettingFromCode(hg.s);
-        if(hg.f==='O'||hg.f==='X')firstChoice=hg.f;
+        if(hostG.z===3||hostG.z===5)cfg.size=hostG.z;
+        cfg.kill=!!hostG.k;cfg.skills=skillSettingFromCode(hostG.s);
+        if(hostG.f==='O'||hostG.f==='X')firstChoice=hostG.f;
       }
       document.querySelectorAll('.chip[data-k="size"],.chip[data-k="kill"],.chip[data-k="skills"],.chip[data-k="first"]').forEach(function(b){
         var k=b.getAttribute('data-k'),v=b.getAttribute('data-v');
@@ -2305,24 +2329,49 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
         b.setAttribute('aria-pressed',v===chosen?'true':'false');
         b.disabled=(!isHost||ready||netOn)&&['size','kill','skills','first'].indexOf(k)>=0;
       });
-      nm.textContent=ready?'相手の準備を待っています…':'キャラをえらんで「準備OK」を押してね（'+(myRole==='O'?'○・ホスト':'×・ゲスト')+'）';
-      pub();render();
-      var charsValid=!!CH[hg.ch]&&!!CH[og.ch]&&chars[myRole]===myCh&&chars[opp(myRole)]===(isHost?og.ch:hg.ch);
-      var bothReady=ready&&hg.rd===1&&og.rd===1&&charsValid;
+
+      render();
+      var charsValid=!!CH[myCh]&&!!CH[peerG.ch]&&
+        chars[myRole]===myCh&&chars[opp(myRole)]===peerG.ch&&
+        !!CH[hostG.ch]&&!!CH[guestG.ch];
+      var peerReady=peerG.rd===1;
+      var bothReady=ready&&peerReady&&charsValid;
       startBtn.hidden=!bothReady;
-      if(ready&&hg.rd===1&&og.rd===1&&!charsValid){
-        nm.textContent='キャラクター情報が一致しません。選択し直して準備OKを押してください。';
-        ready=false;startRequested=false;document.getElementById('bReady').disabled=false;pub();
+      if(bothReady&&startRequested)startBtn.hidden=true;
+
+      if(!charsValid){
+        nm.textContent='相手のキャラクター情報を同期中です。選択が表示されるまで待ってください。';
+      }else if(ready&&!peerReady){
+        nm.textContent='相手の準備を待っています…';
+      }else if(bothReady){
+        nm.textContent=startRequested?(peerG.go===1?'両者の開始を確認中…':'相手の「試合開始」を待っています…'):'両者準備OK！「試合開始」を押してね';
+      }else{
+        nm.textContent='キャラをえらんで「準備OK」を押してね（'+(myRole==='O'?'○・ホスト':'×・ゲスト')+'）';
       }
-      if(bothReady){
-        nm.textContent=startRequested?(og.go===1?'両者の開始を確認中…':'相手の「試合開始」を待っています…'):'両者準備OK！「試合開始」を押してね';
-        if(startRequested)startBtn.hidden=true;
-        document.getElementById('bCancelStart').hidden=!(startRequested||og.go===1);
-        if(startRequested&&og.go===1){
-          // Both devices independently observe both start confirmations and initialize once.
+
+      // A match begins only after each participant independently confirms.
+      // peerG.go is always the OTHER device's flag, regardless of host/guest role.
+      document.getElementById('bCancelStart').hidden=!(bothReady&&(startRequested||peerG.go===1));
+      if(bothReady&&startRequested&&peerG.go===1){
+        // Host publishes the next match epoch. Guest waits for that epoch so
+        // it cannot replay the previous match's move log during a rematch.
+        if(isHost){
+          round=round+1;
+        }else{
+          var hostRound=Number(hostG.r)||0;
+          if(hostRound<=round){
+            startBtn.hidden=true;
+            nm.textContent='ホストの試合開始確定を待っています…';
+          }else{
+            round=hostRound;
+          }
+        }
+        if(isHost||round===(Number(hostG.r)||0)){
           netOn=true;
-          if(!isHost){cfg.size=hg.z;cfg.kill=!!hg.k;cfg.skills=skillSettingFromCode(hg.s);firstChoice=hg.f;}
-          first=(round%2===0?firstChoice:opp(firstChoice));
+          chars[myRole]=myCh;
+          chars[opp(myRole)]=peerG.ch;
+          if(!isHost){cfg.size=hostG.z;cfg.kill=!!hostG.k;cfg.skills=skillSettingFromCode(hostG.s);firstChoice=hostG.f;}
+          first=(round%2===1?firstChoice:opp(firstChoice));
           lg='';applied=0;lastPub='';setup();pub();
           startBtn.hidden=true;
           document.getElementById('bCancelStart').hidden=true;
@@ -2330,18 +2379,20 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
           nm.textContent='対戦開始！';
           noteEl.textContent=(first==='O'?'○':'×')+'が先手です';
         }
-      }else if(ready){startBtn.hidden=true;}
-      if(!bothReady)document.getElementById('bCancelStart').hidden=true;
+      }
     }
-    if(netOn&&og.r===round){
+
+    // Always replay the OTHER participant's log. On the guest device that is
+    // the host's log, not the guest's own presence data.
+    if(netOn&&peerG.r===round){
       remote=true;
-      try{while(applied<og.lg.length){var c=og.lg.charAt(applied++);
+      try{while(applied<peerG.lg.length){var c=peerG.lg.charAt(applied++);
         if(c==='E'||c==='F'||c==='S'||c==='Z'||c==='H'||c==='W')useSkill({E:'erase',F:'flip',S:'swap',Z:'freeze',H:'shuffle',W:'blackhole'}[c]);else handle(parseInt(c,36));}}
       finally{remote=false;}
     }
   }
   function leaveNet(){
-    if(room){room.leave();room=null;}netOn=false;ready=false;startRequested=false;isHost=false;hostRules=null;lg='';applied=0;lastPub='';round=0;
+    if(room){room.leave();room=null;}netOn=false;ready=false;startRequested=false;isHost=false;myRole='O';hostRules=null;lg='';applied=0;lastPub='';round=0;cancelVersion=0;quitVersion=0;lastPeerCancel=0;lastPeerQuit=0;
     document.getElementById('bReady').hidden=true;document.getElementById('bReady').disabled=false;document.getElementById('bJoin').hidden=false;
     document.getElementById('bLeaveRoom').hidden=true;document.getElementById('bReconnect').hidden=true;
     document.getElementById('bQuitMatch').hidden=true;document.getElementById('bCancelStart').hidden=true;
@@ -2353,7 +2404,7 @@ button:focus-visible{outline:3px solid #e45b9d;outline-offset:3px}
     if(!/^[a-z0-9][a-z0-9_.-]{0,19}$/.test(code)){nm.textContent='合言葉は英数字で入れてください。';return;}
     if(!lobby){nm.textContent='通信ライブラリ未初期化。ページを再読み込みしてください。';return;}
     if(room){try{room.leave();}catch(e){} room=null;}
-    netOn=false;ready=false;startRequested=false;isHost=(mode==='host');hostRules=null;lg='';applied=0;lastPub='';round=0;
+    netOn=false;ready=false;startRequested=false;isHost=(mode==='host');myRole=isHost?'O':'X';hostRules=null;lg='';applied=0;lastPub='';round=0;cancelVersion=0;quitVersion=0;lastPeerCancel=0;lastPeerQuit=0;
     document.getElementById('bReady').hidden=true;
     document.getElementById('bReady').disabled=false;document.getElementById('startMatch').hidden=true;
     document.getElementById('bJoin').hidden=false;
